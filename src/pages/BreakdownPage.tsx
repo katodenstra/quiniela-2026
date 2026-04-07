@@ -2,7 +2,7 @@ import { useState } from "react";
 import EmptyState from "../components/EmptyState";
 import GroupTabs from "../components/GroupTabs";
 import PageIntro from "../components/PageIntro";
-import StatusBanner from "../components/StatusBanner";
+//import StatusBanner from "../components/StatusBanner";
 import { scorePrediction, usePoolState } from "../state/usePoolState";
 import type { GroupStageMatch } from "../data/worldcup";
 
@@ -29,8 +29,9 @@ function BreakdownPage({ matches }: { matches: GroupStageMatch[] }) {
     const pred = pool.getPrediction(m.id);
     const res = pool.results[m.id];
     const pts = res ? scorePrediction(pred, res) : undefined;
+    const hasPrediction = pred.home !== null && pred.away !== null;
 
-    return { match: m, pred, res, pts };
+    return { match: m, pred, res, pts, hasPrediction };
   });
 
   const filtered = rows
@@ -62,19 +63,28 @@ function BreakdownPage({ matches }: { matches: GroupStageMatch[] }) {
     { exact: 0, outcome: 0, miss: 0 },
   );
 
+  if (!resultsReady) {
+    return (
+      <section>
+        <PageIntro
+          title="Scoring breakdown"
+          description="Review exact hits, outcome hits, and missed predictions once results are available."
+        />
+
+        <EmptyState
+          title="No breakdown available yet"
+          message="Run a simulation first to unlock match-by-match scoring analysis."
+        />
+      </section>
+    );
+  }
+
   return (
     <section>
       <PageIntro
         title="Scoring breakdown"
         description="Review match-by-match scoring outcomes, filter results and inspect prediction performance."
       />
-
-      {!resultsReady && (
-        <StatusBanner
-          title="Breakdown is in preview mode."
-          message="Simulate the group stage to see match-by-match scoring."
-        />
-      )}
 
       <div
         style={{
@@ -182,7 +192,7 @@ function BreakdownPage({ matches }: { matches: GroupStageMatch[] }) {
             message="Try changing the group, filter, or simulated-only toggle."
           />
         ) : (
-          filtered.map(({ match: m, pred, res, pts }) => (
+          filtered.map(({ match: m, pred, res, pts, hasPrediction }) => (
             <div
               key={m.id}
               style={{
@@ -216,7 +226,7 @@ function BreakdownPage({ matches }: { matches: GroupStageMatch[] }) {
                   <strong
                     style={{ color: "var(--text-primary)", fontWeight: 600 }}
                   >
-                    {pred.home}–{pred.away}
+                    {hasPrediction ? `${pred.home}–${pred.away}` : "Not set"}
                   </strong>
                 </div>
                 <div>

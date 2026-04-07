@@ -92,7 +92,7 @@
   /* Semantic dark theme */
   --bg-app: #0f1117;
   --bg-app-alt: #141821;
-  --bg-surface-1: rgba(20, 20, 20, 0.84);
+  --bg-surface-1: rgba(20, 20, 20, 1);
   --bg-surface-2: rgba(31, 31, 31, 0.92);
   --bg-surface-3: rgba(45, 62, 115, 0.14);
   --bg-card-hover: rgba(59, 130, 246, 0.08);

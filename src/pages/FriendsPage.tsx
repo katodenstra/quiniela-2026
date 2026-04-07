@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { getFriends } from "../api/mockApi";
 import { useApi } from "../hooks/useApi";
@@ -5,9 +6,26 @@ import PageIntro from "../components/PageIntro";
 import StatusBanner from "../components/StatusBanner";
 import EmptyState from "../components/EmptyState";
 import Button from "../components/Button";
+import { useFriendPredictions } from "../state/FriendPredictionsContext";
 
 function FriendsPage() {
   const { data: friends, loading, error, refetch } = useApi(getFriends, []);
+
+  const { generatedFriendPredictions } = useFriendPredictions();
+
+  const generatedFriendIds = useMemo(() => {
+    const ids = new Set<string>();
+
+    Object.values(generatedFriendPredictions).forEach((phasePredictions) => {
+      Object.entries(phasePredictions).forEach(([friendId, predictions]) => {
+        if (Object.keys(predictions).length > 0) {
+          ids.add(friendId);
+        }
+      });
+    });
+
+    return ids;
+  }, [generatedFriendPredictions]);
 
   return (
     <section>
@@ -15,6 +33,23 @@ function FriendsPage() {
         title="Friends"
         description="Browse participants and open their prediction details for comparison."
       />
+
+      {generatedFriendIds.size > 0 && (
+        <div
+          className="widget"
+          style={{
+            marginBottom: "1rem",
+            padding: "0.95rem 1rem",
+            borderRadius: "18px",
+            color: "var(--text-secondary)",
+            fontWeight: 500,
+            lineHeight: 1.45,
+          }}
+        >
+          {generatedFriendIds.size} friends currently have generated prediction
+          data available for testing.
+        </div>
+      )}
 
       {loading && (
         <div
@@ -71,6 +106,25 @@ function FriendsPage() {
                 "transform 140ms ease, border-color 140ms ease, background 140ms ease",
             }}
           >
+            {generatedFriendIds.has(f.id) && (
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.25rem 0.55rem",
+                  borderRadius: "999px",
+                  background: "rgba(58, 112, 226, 0.14)",
+                  border: "1px solid rgba(58, 112, 226, 0.22)",
+                  color: "var(--text-primary)",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  marginBottom: "0.65rem",
+                }}
+              >
+                Generated data
+              </div>
+            )}
             <div
               style={{
                 fontWeight: 600,
@@ -87,7 +141,9 @@ function FriendsPage() {
                 lineHeight: 1.4,
               }}
             >
-              Open profile and compare predictions
+              {generatedFriendIds.has(f.id)
+                ? "Open profile and compare generated predictions"
+                : "Open profile and compare predictions"}
             </div>
           </Link>
         ))}

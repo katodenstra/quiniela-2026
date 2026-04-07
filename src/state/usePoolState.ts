@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AppGroupId as GroupId, ViewMode } from "../data/worldcup";
 
-export type Prediction = { home: number; away: number };
+export type Prediction = { home: number | null; away: number | null };
 export type PredictionsByMatchId = Record<number, Prediction>;
 export type PredictionState = "draft" | "submitted" | "locked";
 export type PredictionStateByPhase = Record<TournamentPhase, PredictionState>;
+export type CompletionStatus = "empty" | "partial" | "complete";
 export type Result = { home: number; away: number };
 export type ResultsByMatchId = Record<number, Result>;
 export type { GroupId };
@@ -32,6 +33,8 @@ export function getOutcome(home: number, away: number) {
 }
 
 export function scorePrediction(pred: Prediction, res: Result) {
+  if (pred.home === null || pred.away === null) return 0;
+
   if (pred.home === res.home && pred.away === res.away) return 3;
 
   const predOutcome = getOutcome(pred.home, pred.away);
@@ -131,18 +134,6 @@ export function usePoolState<
     return raw === "matchday" ? "matchday" : "group";
   });
 
-  const matchdays = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          matches
-            .map((m) => ("matchday" in m ? m.matchday : null))
-            .filter((day): day is number => day !== null),
-        ),
-      ).sort((a, b) => a - b),
-    [matches],
-  );
-
   const [selectedMatchday, setSelectedMatchday] = useState<number>(() => {
     const raw = localStorage.getItem(MATCHDAY_KEY);
     const parsed = raw ? Number(raw) : NaN;
@@ -165,15 +156,19 @@ export function usePoolState<
     return "groups";
   });
 
-  const predictionState = predictionStateByPhase[phase];
-
-  useEffect(
-    () => localStorage.setItem(GROUP_KEY, selectedGroup),
-    [selectedGroup],
+  const matchdays = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          matches
+            .map((m) => ("matchday" in m ? m.matchday : null))
+            .filter((day): day is number => day !== null),
+        ),
+      ).sort((a, b) => a - b),
+    [matches],
   );
-  useEffect(() => {
-    localStorage.setItem(STATE_KEY, JSON.stringify(predictionStateByPhase));
-  }, [predictionStateByPhase]);
+
+  const rawPredictionState = predictionStateByPhase[phase];
 
   useEffect(() => {
     try {
@@ -184,12 +179,21 @@ export function usePoolState<
   }, [predictions]);
 
   useEffect(() => {
+    localStorage.setItem(STATE_KEY, JSON.stringify(predictionStateByPhase));
+  }, [predictionStateByPhase]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(RESULTS_KEY, JSON.stringify(results));
     } catch (error) {
       void error;
     }
   }, [results]);
+
+  useEffect(
+    () => localStorage.setItem(GROUP_KEY, selectedGroup),
+    [selectedGroup],
+  );
 
   useEffect(() => {
     localStorage.setItem(VIEW_MODE_KEY, viewMode);
@@ -204,7 +208,11 @@ export function usePoolState<
   }, [phase]);
 
   const getPrediction = (matchId: number): Prediction => {
-    return predictions[phase]?.[matchId] ?? { home: 0, away: 0 };
+    return predictions[phase]?.[matchId] ?? { home: null, away: null };
+  };
+
+  const isPredictionComplete = (pred?: Prediction) => {
+    return pred !== undefined && pred.home !== null && pred.away !== null;
   };
 
   const handlePredictionChange = (matchId: number, next: Prediction) => {
@@ -222,6 +230,8 @@ export function usePoolState<
 
     if (phase === "groups") {
       phaseMatches = matches.filter((match) => match.group !== null);
+    } else if (phase === "roundOf32") {
+      phaseMatches = matches;
     } else {
       phaseMatches = visibleMatches;
     }
@@ -326,17 +336,87 @@ export function usePoolState<
       : matches.filter((m) => m.group === activeGroup);
 
   const predictedInGroup = useMemo(() => {
-    return visibleMatches.reduce(
-      (count, m) => count + (predictions[phase]?.[m.id] !== undefined ? 1 : 0),
-      0,
-    );
-  }, [visibleMatches, predictions, phase]);
-
-  const totalPredicted = useMemo(() => {
     return visibleMatches.reduce((count, m) => {
-      return count + (predictions[phase]?.[m.id] !== undefined ? 1 : 0);
+      const pred = predictions[phase]?.[m.id];
+      return count + (isPredictionComplete(pred) ? 1 : 0);
     }, 0);
   }, [visibleMatches, predictions, phase]);
+
+  const phaseMatches = useMemo(() => {
+    if (phase === "groups") {
+      return matches.filter((m) => m.group !== null);
+    }
+
+    return matches;
+  }, [matches, phase]);
+
+  const totalPredicted = useMemo(() => {
+    return phaseMatches.reduce((count, m) => {
+      const pred = predictions[phase]?.[m.id];
+      return count + (isPredictionComplete(pred) ? 1 : 0);
+    }, 0);
+  }, [phaseMatches, predictions, phase]);
+
+  const predictionState: PredictionState =
+    rawPredictionState === "submitted" && totalPredicted === 0
+      ? "draft"
+      : rawPredictionState;
+
+  const missingPredictionsCount = Math.max(
+    phaseMatches.length - totalPredicted,
+    0,
+  );
+
+  const isEditable = predictionState !== "locked";
+
+  const canSubmitPredictions =
+    totalPredicted > 0 && predictionState !== "locked";
+
+  const groupCompletion = useMemo(() => {
+    return groups.reduce<Record<GroupId, CompletionStatus>>(
+      (acc, group) => {
+        const groupMatches = matches.filter((m) => m.group === group);
+        const completed = groupMatches.reduce((count, match) => {
+          const pred = predictions[phase]?.[match.id];
+          return count + (isPredictionComplete(pred) ? 1 : 0);
+        }, 0);
+
+        if (completed === 0) {
+          acc[group] = "empty";
+        } else if (completed === groupMatches.length) {
+          acc[group] = "complete";
+        } else {
+          acc[group] = "partial";
+        }
+
+        return acc;
+      },
+      {} as Record<GroupId, CompletionStatus>,
+    );
+  }, [groups, matches, predictions, phase]);
+
+  const matchdayCompletion = useMemo(() => {
+    return matchdays.reduce<Record<number, CompletionStatus>>(
+      (acc, day) => {
+        const dayMatches = matches.filter((m) => m.matchday === day);
+        const completed = dayMatches.reduce((count, match) => {
+          const pred = predictions[phase]?.[match.id];
+          return count + (isPredictionComplete(pred) ? 1 : 0);
+        }, 0);
+
+        if (completed === 0) {
+          acc[day] = "empty";
+        } else if (completed === dayMatches.length) {
+          acc[day] = "complete";
+        } else {
+          acc[day] = "partial";
+        }
+
+        return acc;
+      },
+      {} as Record<number, CompletionStatus>,
+    );
+  }, [matchdays, matches, predictions, phase]);
 
   const myPoints = useMemo(() => {
     const groupPredictions = predictions.groups ?? {};
@@ -358,7 +438,7 @@ export function usePoolState<
     visibleMatches,
     predictedInGroup,
     totalPredicted,
-    totalMatches: visibleMatches.length,
+    totalMatches: phaseMatches.length,
     totalInGroup: visibleMatches.length,
     myPoints,
     setSelectedGroup,
@@ -376,5 +456,10 @@ export function usePoolState<
     phase,
     setPhase,
     fillMyPredictionsForCurrentPhase,
+    missingPredictionsCount,
+    isEditable,
+    canSubmitPredictions,
+    groupCompletion,
+    matchdayCompletion,
   };
 }

@@ -19,6 +19,13 @@ import AdminSimulationPanel from "../components/AdminSimulationPanel";
 import { getAllFriendPredictions } from "../api/mockApi";
 import { useFriendPredictions } from "../state/FriendPredictionsContext";
 
+import ScrollableTabs from "../components/ScrollableTabs";
+
+function formatMatchDateLabel(date: string, time: string) {
+  const [year, month, day] = date.split("-");
+  return `${day}/${month}/${year} • ${time}`;
+}
+
 function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
   const pool = usePoolState(matches);
   const {
@@ -30,6 +37,7 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const isGroupPhase = pool.phase === "groups";
   const isRoundOf32Phase = pool.phase === "roundOf32";
+  const isPhaseSubmitted = pool.predictionState === "submitted";
 
   const showStandings =
     pool.viewMode === "group" &&
@@ -70,6 +78,18 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
     console.log("Generated friend predictions for phase:", pool.phase, next);
   };
 
+  const handleSubmitPredictions = () => {
+    if (pool.missingPredictionsCount > 0) {
+      const shouldSubmit = window.confirm(
+        `You still have ${pool.missingPredictionsCount} matches without predictions. Submit anyway?`,
+      );
+
+      if (!shouldSubmit) return;
+    }
+
+    pool.setPredictionState("submitted");
+  };
+
   const handleResetCurrentPhase = () => {
     clearGeneratedFriendPredictionsForPhase(pool.phase);
     pool.resetDraft();
@@ -86,25 +106,39 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
 
   return (
     <section>
-      <PageIntro
-        title="Matches"
-        description="Enter predictions, manage submission state and simulate the group stage."
-      />
+      {isGroupPhase && (
+        <PageIntro
+          title="Matches"
+          description="Enter predictions, manage submission state and simulate the group stage."
+        />
+      )}
       {isGroupPhase && (
         <>
           {/* Action bar */}
           <ActionBar
             predictionState={pool.predictionState}
-            setPredictionState={pool.setPredictionState}
-            resetDraft={pool.resetDraft}
-            simulateCurrentStage={pool.simulateCurrentStage}
-            resetSimulation={pool.resetSimulation}
-            totalPredicted={pool.totalPredicted}
-            totalMatches={pool.totalMatches}
-            myPoints={pool.myPoints}
-            showPoints={pool.predictionState === "locked"}
-            phase={pool.phase}
+            onSubmitPredictions={handleSubmitPredictions}
+            canSubmitPredictions={pool.canSubmitPredictions}
+            missingPredictionsCount={pool.missingPredictionsCount}
           />
+
+          {!pool.isEditable && (
+            <div
+              className="widget"
+              style={{
+                marginBottom: "1rem",
+                padding: "0.95rem 1rem",
+                borderRadius: "18px",
+                color: "var(--text-secondary)",
+                fontWeight: 500,
+                lineHeight: 1.45,
+              }}
+            >
+              Predictions are locked. You can review them, but they can no
+              longer be edited.
+            </div>
+          )}
+
           <div
             style={{
               display: "flex",
@@ -159,23 +193,19 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
           </div>
           {/* Group tabs */}
           {pool.viewMode === "group" ? (
-            <GroupTabs
-              groups={pool.groups}
-              selectedGroup={pool.selectedGroup}
-              onChange={pool.setSelectedGroup}
-            />
+            <ScrollableTabs ariaLabel="Group tabs">
+              <GroupTabs
+                groups={pool.groups}
+                selectedGroup={pool.selectedGroup}
+                onChange={pool.setSelectedGroup}
+                completion={pool.groupCompletion}
+              />
+            </ScrollableTabs>
           ) : (
-            <div
-              style={{
-                display: "flex",
-                gap: "0.5rem",
-                overflowX: "auto",
-                paddingBottom: "0.5rem",
-                marginBottom: "1rem",
-              }}
-            >
+            <ScrollableTabs ariaLabel="Matchday tabs">
               {pool.matchdays.map((day) => {
                 const isActive = pool.selectedMatchday === day;
+                const status = pool.matchdayCompletion[day] ?? "empty";
 
                 return (
                   <button
@@ -198,13 +228,41 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
                       cursor: "pointer",
                       whiteSpace: "nowrap",
                       fontWeight: 600,
+                      flexShrink: 0,
                     }}
                   >
-                    Matchday {day}
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "0.55rem",
+                      }}
+                    >
+                      <span>Matchday {day}</span>
+                      <span
+                        aria-hidden="true"
+                        style={{
+                          width: "0.55rem",
+                          height: "0.55rem",
+                          borderRadius: "999px",
+                          background:
+                            status === "complete"
+                              ? "var(--success-600, #47b881)"
+                              : status === "partial"
+                                ? "var(--warning-600, #ffad0d)"
+                                : "rgba(255,255,255,0.2)",
+                          boxShadow:
+                            status === "empty"
+                              ? "none"
+                              : "0 0 0 4px rgba(255,255,255,0.03)",
+                          flexShrink: 0,
+                        }}
+                      />
+                    </span>
                   </button>
                 );
               })}
-            </div>
+            </ScrollableTabs>
           )}
 
           {/* Progress */}
@@ -253,11 +311,21 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
               width: "100%",
             }}
           >
-            {" "}
             {pool.visibleMatches.map((match) => {
               const pred = pool.getPrediction(match.id);
               const res = pool.results[match.id];
               const pts = res ? scorePrediction(pred, res) : undefined;
+              const hasPrediction = pred.home !== null && pred.away !== null;
+              const headerContextLabel =
+                pool.viewMode === "group"
+                  ? `Matchday ${match.matchday}`
+                  : `Group ${match.group}`;
+              const headerDateLabel = formatMatchDateLabel(
+                match.date,
+                match.time,
+              );
+              const showSubmittedChip = isPhaseSubmitted && hasPrediction;
+              const showNotSubmittedChip = isPhaseSubmitted && !hasPrediction;
 
               return (
                 <MatchCard
@@ -268,13 +336,18 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
                   awayTeamName={match.awayTeam.name}
                   awayTeamCode={match.awayTeam.code}
                   kickoff={`${match.date} ${match.time}`}
+                  headerContextLabel={headerContextLabel}
+                  headerDateLabel={headerDateLabel}
                   venue={match.venue}
                   round={match.round}
                   prediction={pred}
                   onPredictionChange={pool.handlePredictionChange}
-                  isLocked={pool.predictionState === "locked"}
+                  isLocked={!pool.isEditable}
                   result={res}
                   points={pts}
+                  isSubmitted={isPhaseSubmitted}
+                  showSubmittedChip={showSubmittedChip}
+                  showNotSubmittedChip={showNotSubmittedChip}
                 />
               );
             })}
@@ -290,17 +363,28 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
           />
 
           <ActionBar
-            phase={pool.phase}
             predictionState={pool.predictionState}
-            setPredictionState={pool.setPredictionState}
-            resetDraft={pool.resetDraft}
-            simulateCurrentStage={pool.simulateCurrentStage}
-            resetSimulation={pool.resetSimulation}
-            totalPredicted={pool.totalPredicted}
-            totalMatches={knockoutMatches.length}
-            myPoints={pool.myPoints}
-            showPoints={false}
+            onSubmitPredictions={handleSubmitPredictions}
+            canSubmitPredictions={pool.canSubmitPredictions}
+            missingPredictionsCount={pool.missingPredictionsCount}
           />
+
+          {!pool.isEditable && (
+            <div
+              className="widget"
+              style={{
+                marginBottom: "1rem",
+                padding: "0.95rem 1rem",
+                borderRadius: "18px",
+                color: "var(--text-secondary)",
+                fontWeight: 500,
+                lineHeight: 1.45,
+              }}
+            >
+              Predictions are locked. You can review them, but they can no
+              longer be edited.
+            </div>
+          )}
 
           <div
             style={{
@@ -310,8 +394,8 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
               fontSize: "0.98rem",
             }}
           >
-            Round of 32 — {pool.predictedInGroup}/{knockoutMatches.length}{" "}
-            predicted
+            Round of 32 — {pool.predictedInGroup}/{pool.totalInGroup} predicted
+            • Total: {pool.totalPredicted}/{pool.totalMatches}
           </div>
 
           <div
@@ -323,6 +407,14 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
           >
             {knockoutMatches.map((match) => {
               const pred = pool.getPrediction(match.id);
+              const hasPrediction = pred.home !== null && pred.away !== null;
+              const headerContextLabel = "Round of 32";
+              const headerDateLabel = formatMatchDateLabel(
+                match.date,
+                match.time,
+              );
+              const showSubmittedChip = isPhaseSubmitted && hasPrediction;
+              const showNotSubmittedChip = isPhaseSubmitted && !hasPrediction;
 
               return (
                 <MatchCard
@@ -333,11 +425,16 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
                   awayTeamName={match.awayTeam.teamName}
                   awayTeamCode={match.awayTeam.teamCode}
                   kickoff={`${match.date} • ${match.time}`}
+                  headerContextLabel={headerContextLabel}
+                  headerDateLabel={headerDateLabel}
                   venue={match.venue}
                   round={match.round}
                   prediction={pred}
                   onPredictionChange={pool.handlePredictionChange}
-                  isLocked={false}
+                  isLocked={!pool.isEditable}
+                  isSubmitted={isPhaseSubmitted}
+                  showSubmittedChip={showSubmittedChip}
+                  showNotSubmittedChip={showNotSubmittedChip}
                 />
               );
             })}

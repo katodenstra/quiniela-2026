@@ -10,14 +10,19 @@ type MatchCardProps = {
   kickoff: string;
   venue: string;
   round: string;
-  prediction: { home: number; away: number };
+  prediction: { home: number | null; away: number | null };
   onPredictionChange: (
     matchId: number,
-    next: { home: number; away: number },
+    next: { home: number | null; away: number | null },
   ) => void;
   isLocked: boolean;
   result?: { home: number; away: number };
   points?: number;
+  isSubmitted?: boolean;
+  headerContextLabel?: string;
+  headerDateLabel?: string;
+  showSubmittedChip?: boolean;
+  showNotSubmittedChip?: boolean;
 };
 
 function MatchCard({
@@ -34,20 +39,43 @@ function MatchCard({
   isLocked,
   result,
   points,
+  isSubmitted = false,
+  headerContextLabel,
+  headerDateLabel,
+  showSubmittedChip,
+  showNotSubmittedChip,
 }: MatchCardProps) {
   const homeScore = prediction.home;
   const awayScore = prediction.away;
+  const hasPrediction = homeScore !== null && awayScore !== null;
+
+  const resolvedHeaderContextLabel = headerContextLabel ?? round;
+  const resolvedHeaderDateLabel = headerDateLabel ?? kickoff;
+
+  const submittedChipVisible =
+    (showSubmittedChip ?? false) || (isSubmitted && !isLocked && hasPrediction);
+  const notSubmittedChipVisible =
+    (showNotSubmittedChip ?? false) || (isSubmitted && !isLocked && !hasPrediction);
+
+  const isHighlightVisible = submittedChipVisible;
 
   return (
     <div
       style={{
-        border: "1px solid var(--border-subtle)",
+        border: isHighlightVisible
+          ? "1px solid rgba(12, 157, 97, 0.24)"
+          : "1px solid var(--border-subtle)",
         borderRadius: "24px",
-        padding: "1.1rem 1.2rem",
+        padding: "1rem 1.1rem",
         marginBottom: "1rem",
         background:
           "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-        boxShadow: "var(--shadow-soft)",
+        boxShadow: isLocked
+          ? "none"
+          : isHighlightVisible
+            ? "0 0 0 1px rgba(12, 157, 97, 0.08), var(--shadow-soft)"
+            : "var(--shadow-soft)",
+        opacity: isLocked ? 0.9 : 1,
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
       }}
@@ -55,51 +83,121 @@ function MatchCard({
       <div
         style={{
           display: "flex",
+          alignItems: "center",
           justifyContent: "space-between",
+          gap: "1rem",
+          paddingBottom: "0.85rem",
+          marginBottom: "1rem",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          flexWrap: "wrap",
+        }}
+      >
+        <div
+          style={{
+            fontSize: "0.9rem",
+            color: "var(--text-secondary)",
+            fontWeight: 600,
+          }}
+        >
+          {resolvedHeaderContextLabel}
+        </div>
+
+        <div
+          style={{
+            fontSize: "0.88rem",
+            color: "var(--text-muted)",
+            fontWeight: 500,
+            textAlign: "center",
+            flex: "1 1 auto",
+          }}
+        >
+          {resolvedHeaderDateLabel}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            justifyContent: "flex-end",
+            minWidth: "fit-content",
+          }}
+        >
+          {submittedChipVisible && (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0.32rem 0.8rem",
+                borderRadius: "999px",
+                background: "rgba(12, 157, 97, 0.12)",
+                border: "1px solid rgba(12, 157, 97, 0.18)",
+                color: "var(--text-primary)",
+                fontSize: "0.78rem",
+                fontWeight: 600,
+                lineHeight: 1.1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Submitted
+            </div>
+          )}
+
+          {notSubmittedChipVisible && (
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0.32rem 0.8rem",
+                borderRadius: "999px",
+                background: "rgba(255, 173, 13, 0.12)",
+                border: "1px solid rgba(255, 173, 13, 0.18)",
+                color: "var(--text-primary)",
+                fontSize: "0.78rem",
+                fontWeight: 600,
+                lineHeight: 1.1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              Not submitted
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
           gap: "1rem",
         }}
       >
-        <div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "minmax(160px, 1fr) auto auto auto minmax(160px, 1fr)",
+            alignItems: "center",
+            gap: "0.9rem",
+            width: "100%",
+          }}
+        >
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
-              gap: "0.75rem",
-              width: "100%",
+              justifyContent: "flex-end",
+              gap: "0.65rem",
+              minWidth: 0,
+              textAlign: "right",
             }}
           >
-            <TeamBadge name={homeTeamName} code={homeTeamCode} />
-            <span
-              style={{
-                color: "var(--text-muted)",
-                fontWeight: 500,
-                flexShrink: 0,
-              }}
-            >
-              vs
-            </span>
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "0.65rem",
-                flexDirection: "row-reverse",
-                textAlign: "right",
-              }}
-            >
-              <TeamBadge name={awayTeamName} code={awayTeamCode} reverse />
-            </div>{" "}
+            <TeamBadge name={homeTeamName} code={homeTeamCode} reverse />
           </div>
-          <div style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>
-            {round} • Kickoff: {kickoff}
-          </div>
-          <div style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>
-            {venue}
-          </div>
-        </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <ScoreStepper
             label={`${homeTeamName} score`}
             value={homeScore}
@@ -111,7 +209,15 @@ function MatchCard({
             disabled={isLocked}
           />
 
-          <span style={{ fontWeight: 700 }}>–</span>
+          <span
+            style={{
+              fontWeight: 700,
+              color: "var(--text-muted)",
+              fontSize: "1.2rem",
+            }}
+          >
+            :
+          </span>
 
           <ScoreStepper
             label={`${awayTeamName} score`}
@@ -123,30 +229,46 @@ function MatchCard({
             }
             disabled={isLocked}
           />
+
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-start",
+              gap: "0.65rem",
+              minWidth: 0,
+            }}
+          >
+            <TeamBadge name={awayTeamName} code={awayTeamCode} />
+          </div>
+        </div>
+
+        <div
+          style={{
+            fontSize: "0.92rem",
+            color: "var(--text-muted)",
+            textAlign: "center",
+          }}
+        >
+          {venue}
         </div>
       </div>
 
-      <div
-        style={{
-          marginTop: "0.8rem",
-          fontSize: "0.95rem",
-          color: "var(--text-secondary)",
-        }}
-      >
-        Your prediction:{" "}
-        <strong style={{ color: "var(--text-primary)", fontWeight: 600 }}>
-          {homeScore}–{awayScore}
-        </strong>
-      </div>
-
       {result && (
-        <div style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "#333" }}>
-          Result:{" "}
-          <strong>
+        <div
+          style={{
+            marginTop: "0.85rem",
+            fontSize: "0.88rem",
+            color: "var(--text-secondary)",
+            textAlign: "center",
+          }}
+        >
+          Result{" "}
+          <strong style={{ color: "var(--text-primary)" }}>
             {result.home}–{result.away}
           </strong>
           {typeof points === "number" && (
-            <span style={{ marginLeft: "0.75rem", fontWeight: 700 }}>
+            <span style={{ marginLeft: "0.7rem", fontWeight: 700 }}>
               +{points} pts
             </span>
           )}

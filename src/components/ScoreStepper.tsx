@@ -1,9 +1,9 @@
 type ScoreStepperProps = {
   label: string;
-  value: number;
+  value: number | null;
   min?: number;
   max?: number;
-  onChange: (next: number) => void;
+  onChange: (next: number | null) => void;
   disabled?: boolean;
 };
 
@@ -22,82 +22,68 @@ function ScoreStepper({
   disabled,
 }: ScoreStepperProps) {
   const isDisabled = disabled ?? false;
+  const hasValue = value !== null;
+  const displayValue = hasValue ? value : "";
+  const safeValue = hasValue ? value : 0;
 
-  const decDisabled = isDisabled || value <= min;
-  const incDisabled = isDisabled || value >= max;
-
-  const decrement = () => {
-    if (decDisabled) return;
-    onChange(clamp(value - 1, min, max));
-  };
-
-  const increment = () => {
-    if (incDisabled) return;
-    onChange(clamp(value + 1, min, max));
-  };
+  const nextIncrementValue = hasValue ? clamp(safeValue + 1, min, max) : 0;
+  const nextDecrementValue = hasValue ? clamp(safeValue - 1, min, max) : 0;
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-      <button
-        type="button"
-        aria-label={`${label}: decrease`}
-        onClick={decrement}
-        disabled={decDisabled}
-        style={{
-          width: "3rem",
-          height: "3rem",
-          borderRadius: "12px",
-          border: "1px solid #444",
-          background: decDisabled ? "#2a2a2a" : "#1f1f1f",
-          color: "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "1.2rem",
-          fontWeight: 600,
-          cursor: decDisabled ? "not-allowed" : "pointer",
-        }}
-      >
-        –
-      </button>
+    <input
+      aria-label={label}
+      className="score-stepper-input"
+      type="number"
+      inputMode="numeric"
+      placeholder="-"
+      min={min}
+      max={max}
+      value={displayValue}
+      disabled={isDisabled}
+      onChange={(e) => {
+        const raw = e.target.value;
 
-      <div
-        aria-label={label}
-        role="status"
-        style={{
-          width: "2.5rem",
-          textAlign: "center",
-          fontWeight: 700,
-          fontSize: "1.2rem",
-          color: "#fff",
-        }}
-      >
-        {value}
-      </div>
+        if (raw === "") {
+          onChange(null);
+          return;
+        }
 
-      <button
-        type="button"
-        aria-label={`${label}: increase`}
-        onClick={increment}
-        disabled={incDisabled}
-        style={{
-          width: "3rem",
-          height: "3rem",
-          borderRadius: "12px",
-          border: "1px solid #444",
-          background: incDisabled ? "#2a2a2a" : "#1f1f1f",
-          color: "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: "1.2rem",
-          fontWeight: 600,
-          cursor: incDisabled ? "not-allowed" : "pointer",
-        }}
-      >
-        +
-      </button>
-    </div>
+        const parsed = Number(raw);
+
+        if (Number.isNaN(parsed)) return;
+
+        onChange(clamp(parsed, min, max));
+      }}
+      onKeyDown={(e) => {
+        if (isDisabled) return;
+
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          onChange(nextIncrementValue);
+        }
+
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          onChange(nextDecrementValue);
+        }
+      }}
+      style={{
+        width: "4rem",
+        height: "3rem",
+        textAlign: "center",
+        fontWeight: 700,
+        fontSize: "1.25rem",
+        color: "var(--text-primary)",
+        background: isDisabled
+          ? "rgba(255,255,255,0.03)"
+          : "rgba(255,255,255,0.04)",
+        border: "1px solid var(--border-subtle)",
+        borderRadius: "14px",
+        outline: "none",
+        boxSizing: "border-box",
+        opacity: isDisabled ? 0.6 : 1,
+      }}
+    />
   );
 }
 
