@@ -41,12 +41,17 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
   const isGroupPhase = pool.phase === "groups";
   const isRoundOf32Phase = pool.phase === "roundOf32";
 
+  const hasGroupResults =
+    matches.length > 0 &&
+    matches.every((match) => pool.results[match.id] !== undefined);
+
   const showStandings =
+    isGroupPhase &&
     pool.viewMode === "group" &&
-    pool.rawPredictionState === "locked" &&
+    hasGroupResults &&
     pool.visibleMatches.length > 0;
 
-  const standingsByGroup = showStandings
+  const standingsByGroup = hasGroupResults
     ? Object.fromEntries(
         pool.groups.map((group) => [
           group,
@@ -55,7 +60,7 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
       )
     : {};
 
-  const qualifiedThirdGroups = showStandings
+  const qualifiedThirdGroups = hasGroupResults
     ? getQualifiedThirdGroupSet(standingsByGroup)
     : new Set<string>();
 
@@ -63,12 +68,12 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
     ? (standingsByGroup[pool.selectedGroup] ?? [])
     : [];
 
-  const bestThirds = showStandings
+  const bestThirds = hasGroupResults
     ? getBestThirdPlacedTeams(standingsByGroup)
     : [];
 
   const roundOf32 =
-    showStandings && bestThirds.length >= 8
+    hasGroupResults && bestThirds.length >= 8
       ? generateRoundOf32(standingsByGroup, bestThirds)
       : [];
 
@@ -95,6 +100,19 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
       return true;
     });
   }, [knockoutMatches, pool, matchFilter]);
+
+  const roundOf32PredictedCount = useMemo(() => {
+    return knockoutMatches.reduce((count, match) => {
+      const pred = pool.getPrediction(match.id);
+      const isComplete = pred.home !== null && pred.away !== null;
+      return count + (isComplete ? 1 : 0);
+    }, 0);
+  }, [knockoutMatches, pool]);
+
+  const roundOf32MissingCount = Math.max(
+    knockoutMatches.length - roundOf32PredictedCount,
+    0,
+  );
 
   const handleGenerateFriendsPredictions = async () => {
     const next = await getAllFriendPredictions(pool.phase);
@@ -277,7 +295,7 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
           {/* Progress + filter */}
           <div
             style={{
-              maxWidth: "900px",
+              maxWidth: "980px",
               margin: "0 auto 1.25rem",
               width: "100%",
               display: "flex",
@@ -292,20 +310,26 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
                 color: "var(--text-secondary)",
                 fontWeight: 500,
                 fontSize: "0.98rem",
+                whiteSpace: "nowrap",
+                flex: "1 1 auto",
+                minWidth: 0,
               }}
             >
               {pool.viewMode === "group"
-                ? `${pool.totalInGroup - pool.predictedInGroup} matches remaining in Group ${pool.selectedGroup}`
-                : `${pool.totalInGroup - pool.predictedInGroup} matches remaining in Matchday ${pool.selectedMatchday}`}{" "}
-              • {pool.totalPredicted} of {pool.totalMatches} predictions saved
+                ? `${pool.totalInGroup - pool.predictedInGroup} remaining in Group ${pool.selectedGroup}`
+                : `${pool.totalInGroup - pool.predictedInGroup} remaining in Matchday ${pool.selectedMatchday}`}{" "}
+              • {pool.totalPredicted}/{pool.totalMatches} saved
             </div>
+
             <div
               style={{
                 display: "flex",
                 alignItems: "center",
                 gap: "0.5rem",
-                flexWrap: "wrap",
+                flexWrap: "nowrap",
                 justifyContent: "flex-end",
+                flex: "0 0 auto",
+                whiteSpace: "nowrap",
               }}
             >
               <span
@@ -317,6 +341,7 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
               >
                 Filter matches by:
               </span>
+
               <div
                 style={{
                   display: "inline-flex",
@@ -482,11 +507,13 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
                 color: "var(--text-secondary)",
                 fontWeight: 500,
                 fontSize: "0.98rem",
+                whiteSpace: "nowrap",
+                flex: "1 1 auto",
+                minWidth: 0,
               }}
             >
-              {pool.totalInGroup - pool.predictedInGroup} matches remaining in
-              the Round of 32 • {pool.totalPredicted} of {pool.totalMatches}
-              predictions saved
+              {roundOf32MissingCount} remaining in Round of 32 •{" "}
+              {roundOf32PredictedCount}/{knockoutMatches.length} saved{" "}
             </div>
 
             <div
@@ -560,6 +587,23 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
               width: "100%",
             }}
           >
+            {filteredKnockoutMatches.length === 0 && (
+              <div
+                className="widget"
+                style={{
+                  padding: "1rem 1.1rem",
+                  borderRadius: "18px",
+                  color: "var(--text-secondary)",
+                  textAlign: "center",
+                  lineHeight: 1.5,
+                }}
+              >
+                {matchFilter === "all"
+                  ? "Round of 32 matches are not available yet."
+                  : "No matches match the current filter."}
+              </div>
+            )}
+
             {filteredKnockoutMatches.map((match) => {
               const pred = pool.getPrediction(match.id);
               const matchSubmissionStatus = pool.getMatchSubmissionStatus(

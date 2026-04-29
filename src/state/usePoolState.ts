@@ -289,7 +289,12 @@ export function usePoolState<
       ...results,
     };
 
-    for (const match of visibleMatches) {
+    const matchesToSimulate =
+      phase === "groups"
+        ? matches.filter((match) => match.group !== null)
+        : visibleMatches;
+
+    for (const match of matchesToSimulate) {
       nextResults[match.id] = { home: randomScore(), away: randomScore() };
     }
 

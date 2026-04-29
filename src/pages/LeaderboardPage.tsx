@@ -1,15 +1,45 @@
 import { useEffect, useMemo, useState } from "react";
 import { getFriends, getFriendPredictions, type Friend } from "../api/mockApi";
-import { scorePrediction, usePoolState } from "../state/usePoolState";
+import {
+  scorePrediction,
+  usePoolState,
+  type Prediction,
+} from "../state/usePoolState";
 import { useNavigate } from "react-router-dom";
 import StatusBanner from "../components/StatusBanner";
 import PageIntro from "../components/PageIntro";
 import Button from "../components/Button";
 import EmptyState from "../components/EmptyState";
 import type { GroupStageMatch } from "../data/worldcup";
+import { calculateGroupStandings } from "../data/standings";
+import { getBestThirdPlacedTeams } from "../data/qualification";
+import { generateRoundOf32 } from "../data/knockout";
 import { useFriendPredictions } from "../state/FriendPredictionsContext";
 
-type Entry = { id: string; name: string; points: number | null };
+type Entry = {
+  id: string;
+  name: string;
+  points: number | null;
+  pointsByPhase: {
+    groups: number;
+    roundOf32: number;
+  };
+};
+
+function computePhasePoints(
+  phaseMatches: Array<{ id: number }>,
+  predictionsByMatch: Record<number, Prediction> | undefined,
+  resultsByMatch: Record<number, { home: number; away: number }>,
+) {
+  if (!predictionsByMatch) return 0;
+
+  return phaseMatches.reduce((total, match) => {
+    const pred = predictionsByMatch[match.id];
+    const res = resultsByMatch[match.id];
+    if (!pred || !res) return total;
+    return total + scorePrediction(pred, res);
+  }, 0);
+}
 
 function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
   const pool = usePoolState(matches);
@@ -18,13 +48,20 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { generatedFriendPredictions } = useFriendPredictions();
-  const phaseFriendPredictions = useMemo(
-    () => generatedFriendPredictions[pool.phase] ?? {},
-    [generatedFriendPredictions, pool.phase],
+
+  const generatedGroupFriendPredictions = useMemo(
+    () => generatedFriendPredictions.groups ?? {},
+    [generatedFriendPredictions],
+  );
+
+  const generatedRoundOf32FriendPredictions = useMemo(
+    () => generatedFriendPredictions.roundOf32 ?? {},
+    [generatedFriendPredictions],
   );
 
   const usingGeneratedPredictions =
-    Object.keys(phaseFriendPredictions).length > 0;
+    Object.keys(generatedGroupFriendPredictions).length > 0 ||
+    Object.keys(generatedRoundOf32FriendPredictions).length > 0;
 
   useEffect(() => {
     let alive = true;
@@ -48,14 +85,77 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
     };
   }, []);
 
-  const resultsReady =
-    pool.rawPredictionState === "locked" &&
-    Object.keys(pool.results).length > 0;
+  const groupsResultsReady =
+    matches.length > 0 &&
+    matches.every((match) => pool.results[match.id] !== undefined);
+
+  const standingsByGroup = groupsResultsReady
+    ? Object.fromEntries(
+        pool.groups.map((group) => [
+          group,
+          calculateGroupStandings(matches, pool.results, group),
+        ]),
+      )
+    : {};
+
+  const bestThirds = groupsResultsReady
+    ? getBestThirdPlacedTeams(standingsByGroup)
+    : [];
+
+  const roundOf32Matches =
+    groupsResultsReady && bestThirds.length >= 8
+      ? generateRoundOf32(standingsByGroup, bestThirds)
+      : [];
+
+  const roundOf32ResultsReady =
+    roundOf32Matches.length > 0 &&
+    roundOf32Matches.every((match) => pool.results[match.id] !== undefined);
+
+  const resultsReady = groupsResultsReady || roundOf32ResultsReady;
 
   const myEntry: Entry = useMemo(() => {
-    if (!resultsReady) return { id: "me", name: "You", points: null };
-    return { id: "me", name: "You", points: pool.myPoints };
-  }, [resultsReady, pool.myPoints]);
+    if (!resultsReady) {
+      return {
+        id: "me",
+        name: "You",
+        points: null,
+        pointsByPhase: {
+          groups: 0,
+          roundOf32: 0,
+        },
+      };
+    }
+
+    const groupPoints = groupsResultsReady
+      ? computePhasePoints(matches, pool.predictions.groups, pool.results)
+      : 0;
+
+    const roundOf32Points = roundOf32ResultsReady
+      ? computePhasePoints(
+          roundOf32Matches,
+          pool.predictions.roundOf32,
+          pool.results,
+        )
+      : 0;
+
+    return {
+      id: "me",
+      name: "You",
+      points: groupPoints + roundOf32Points,
+      pointsByPhase: {
+        groups: groupPoints,
+        roundOf32: roundOf32Points,
+      },
+    };
+  }, [
+    resultsReady,
+    groupsResultsReady,
+    roundOf32ResultsReady,
+    matches,
+    roundOf32Matches,
+    pool.predictions,
+    pool.results,
+  ]);
 
   const [friendEntries, setFriendEntries] = useState<Entry[]>([]);
 
@@ -69,22 +169,38 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
       }
 
       try {
-        const hasGeneratedPredictions = usingGeneratedPredictions;
-
         const entries: Entry[] = [];
+
         for (const f of friends) {
-          const preds = hasGeneratedPredictions
-            ? (phaseFriendPredictions[f.id] ?? {})
-            : await getFriendPredictions(f.id, pool.phase);
+          const groupPredictions =
+            generatedGroupFriendPredictions[f.id] ??
+            (await getFriendPredictions(f.id, "groups"));
 
-          const pts = matches.reduce((total, m) => {
-            const pred = preds[m.id];
-            const res = pool.results[m.id];
-            if (!pred || !res) return total;
-            return total + scorePrediction(pred, res);
-          }, 0);
+          const roundOf32Predictions =
+            generatedRoundOf32FriendPredictions[f.id] ??
+            (await getFriendPredictions(f.id, "roundOf32"));
 
-          entries.push({ id: f.id, name: f.name, points: pts });
+          const groupPoints = groupsResultsReady
+            ? computePhasePoints(matches, groupPredictions, pool.results)
+            : 0;
+
+          const roundOf32Points = roundOf32ResultsReady
+            ? computePhasePoints(
+                roundOf32Matches,
+                roundOf32Predictions,
+                pool.results,
+              )
+            : 0;
+
+          entries.push({
+            id: f.id,
+            name: f.name,
+            points: groupPoints + roundOf32Points,
+            pointsByPhase: {
+              groups: groupPoints,
+              roundOf32: roundOf32Points,
+            },
+          });
         }
 
         if (!alive) return;
@@ -104,11 +220,13 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
   }, [
     friends,
     resultsReady,
+    groupsResultsReady,
+    roundOf32ResultsReady,
     matches,
-    pool.phase,
+    roundOf32Matches,
     pool.results,
-    phaseFriendPredictions,
-    usingGeneratedPredictions,
+    generatedGroupFriendPredictions,
+    generatedRoundOf32FriendPredictions,
   ]);
 
   const leaderboard = useMemo(() => {
@@ -138,7 +256,7 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
       {!resultsReady && (
         <StatusBanner
           title="Leaderboard is in preview mode."
-          message="Simulate the group stage to rank everyone and compute points."
+          message="Simulate the group stage to start ranking everyone. Knockout phases will add to the total."
         />
       )}
 
@@ -283,9 +401,7 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
                     >
                       {e.points === null
                         ? "Waiting for simulation"
-                        : clickable
-                          ? "View prediction details"
-                          : "Your current standing"}
+                        : `Groups: ${e.pointsByPhase.groups} • R32: ${e.pointsByPhase.roundOf32}`}
                     </div>
                   </div>
                 </div>
