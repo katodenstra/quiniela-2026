@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 type ScoreStepperProps = {
   label: string;
   value: number | null;
@@ -23,11 +25,11 @@ function ScoreStepper({
 }: ScoreStepperProps) {
   const isDisabled = disabled ?? false;
   const hasValue = value !== null;
-  const displayValue = hasValue ? value : "";
   const safeValue = hasValue ? value : 0;
-
   const nextIncrementValue = hasValue ? clamp(safeValue + 1, min, max) : 0;
   const nextDecrementValue = hasValue ? clamp(safeValue - 1, min, max) : 0;
+  const [isFocused, setIsFocused] = useState(false);
+  const displayValue = hasValue ? value : "";
 
   return (
     <input
@@ -35,11 +37,13 @@ function ScoreStepper({
       className="score-stepper-input"
       type="number"
       inputMode="numeric"
-      placeholder="-"
+      placeholder={isFocused ? "" : "-"}
       min={min}
       max={max}
       value={displayValue}
       disabled={isDisabled}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
       onChange={(e) => {
         const raw = e.target.value;
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import MatchCard from "../components/MatchCard";
 import GroupTabs from "../components/GroupTabs";
 import ActionBar from "../components/ActionBar";
@@ -21,6 +21,8 @@ import { useFriendPredictions } from "../state/FriendPredictionsContext";
 
 import ScrollableTabs from "../components/ScrollableTabs";
 
+type MatchFilter = "all" | "predicted" | "unpredicted";
+
 function formatMatchDateLabel(date: string, time: string) {
   const [year, month, day] = date.split("-");
   return `${day}/${month}/${year} • ${time}`;
@@ -35,13 +37,13 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
     clearGeneratedFriendPredictions,
   } = useFriendPredictions();
   const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+  const [matchFilter, setMatchFilter] = useState<MatchFilter>("all");
   const isGroupPhase = pool.phase === "groups";
   const isRoundOf32Phase = pool.phase === "roundOf32";
-  const isPhaseSubmitted = pool.predictionState === "submitted";
 
   const showStandings =
     pool.viewMode === "group" &&
-    pool.predictionState === "locked" &&
+    pool.rawPredictionState === "locked" &&
     pool.visibleMatches.length > 0;
 
   const standingsByGroup = showStandings
@@ -72,22 +74,32 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
 
   const knockoutMatches = pool.phase === "roundOf32" ? roundOf32 : [];
 
+  const filteredVisibleMatches = useMemo(() => {
+    return pool.visibleMatches.filter((match) => {
+      const status = pool.getMatchSubmissionStatus(match.id);
+      const isPredicted = status === "saved" || status === "locked-saved";
+
+      if (matchFilter === "predicted") return isPredicted;
+      if (matchFilter === "unpredicted") return !isPredicted;
+      return true;
+    });
+  }, [pool.visibleMatches, pool, matchFilter]);
+
+  const filteredKnockoutMatches = useMemo(() => {
+    return knockoutMatches.filter((match) => {
+      const status = pool.getMatchSubmissionStatus(match.id);
+      const isPredicted = status === "saved" || status === "locked-saved";
+
+      if (matchFilter === "predicted") return isPredicted;
+      if (matchFilter === "unpredicted") return !isPredicted;
+      return true;
+    });
+  }, [knockoutMatches, pool, matchFilter]);
+
   const handleGenerateFriendsPredictions = async () => {
     const next = await getAllFriendPredictions(pool.phase);
     setGeneratedFriendPredictionsForPhase(pool.phase, next);
     console.log("Generated friend predictions for phase:", pool.phase, next);
-  };
-
-  const handleSubmitPredictions = () => {
-    if (pool.missingPredictionsCount > 0) {
-      const shouldSubmit = window.confirm(
-        `You still have ${pool.missingPredictionsCount} matches without predictions. Submit anyway?`,
-      );
-
-      if (!shouldSubmit) return;
-    }
-
-    pool.setPredictionState("submitted");
   };
 
   const handleResetCurrentPhase = () => {
@@ -109,19 +121,16 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
       {isGroupPhase && (
         <PageIntro
           title="Matches"
-          description="Enter predictions, manage submission state and simulate the group stage."
+          description="Enter predictions, track saved progress and simulate the group stage."
         />
       )}
       {isGroupPhase && (
         <>
           {/* Action bar */}
           <ActionBar
-            predictionState={pool.predictionState}
-            onSubmitPredictions={handleSubmitPredictions}
-            canSubmitPredictions={pool.canSubmitPredictions}
+            submissionStatus={pool.submissionStatus}
             missingPredictionsCount={pool.missingPredictionsCount}
           />
-
           {!pool.isEditable && (
             <div
               className="widget"
@@ -265,20 +274,94 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
             </ScrollableTabs>
           )}
 
-          {/* Progress */}
+          {/* Progress + filter */}
           <div
             style={{
-              marginBottom: "1.25rem",
-              color: "var(--text-secondary)",
-              fontWeight: 500,
-              fontSize: "0.98rem",
+              maxWidth: "900px",
+              margin: "0 auto 1.25rem",
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "1rem",
+              flexWrap: "wrap",
             }}
           >
-            {pool.viewMode === "group"
-              ? `Group ${pool.selectedGroup}`
-              : `Matchday ${pool.selectedMatchday}`}{" "}
-            — {pool.predictedInGroup}/{pool.totalInGroup} predicted • Total:{" "}
-            {pool.totalPredicted}/{pool.totalMatches}
+            <div
+              style={{
+                color: "var(--text-secondary)",
+                fontWeight: 500,
+                fontSize: "0.98rem",
+              }}
+            >
+              {pool.viewMode === "group"
+                ? `${pool.totalInGroup - pool.predictedInGroup} matches remaining in Group ${pool.selectedGroup}`
+                : `${pool.totalInGroup - pool.predictedInGroup} matches remaining in Matchday ${pool.selectedMatchday}`}{" "}
+              • {pool.totalPredicted} of {pool.totalMatches} predictions saved
+            </div>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                flexWrap: "wrap",
+                justifyContent: "flex-end",
+              }}
+            >
+              <span
+                style={{
+                  color: "var(--text-secondary)",
+                  fontWeight: 500,
+                  fontSize: "0.94rem",
+                }}
+              >
+                Filter matches by:
+              </span>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  padding: "0.25rem",
+                  borderRadius: "999px",
+                  border: "1px solid var(--border-subtle)",
+                  background: "rgba(255,255,255,0.04)",
+                }}
+              >
+                {[
+                  { key: "all", label: "All matches" },
+                  { key: "predicted", label: "Predicted" },
+                  { key: "unpredicted", label: "Not predicted" },
+                ].map((option) => {
+                  const isActive = matchFilter === option.key;
+
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setMatchFilter(option.key as MatchFilter)}
+                      style={{
+                        border: "none",
+                        background: isActive
+                          ? "rgba(58, 112, 226, 0.20)"
+                          : "transparent",
+                        color: isActive
+                          ? "var(--text-primary)"
+                          : "var(--text-secondary)",
+                        padding: "0.5rem 0.8rem",
+                        borderRadius: "999px",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        fontSize: "0.9rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {showStandings && standings.length > 0 && (
@@ -311,11 +394,13 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
               width: "100%",
             }}
           >
-            {pool.visibleMatches.map((match) => {
+            {filteredVisibleMatches.map((match) => {
               const pred = pool.getPrediction(match.id);
               const res = pool.results[match.id];
               const pts = res ? scorePrediction(pred, res) : undefined;
-              const hasPrediction = pred.home !== null && pred.away !== null;
+              const matchSubmissionStatus = pool.getMatchSubmissionStatus(
+                match.id,
+              );
               const headerContextLabel =
                 pool.viewMode === "group"
                   ? `Matchday ${match.matchday}`
@@ -324,8 +409,7 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
                 match.date,
                 match.time,
               );
-              const showSubmittedChip = isPhaseSubmitted && hasPrediction;
-              const showNotSubmittedChip = isPhaseSubmitted && !hasPrediction;
+              const showSavedIndicator = matchSubmissionStatus === "saved";
 
               return (
                 <MatchCard
@@ -345,9 +429,7 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
                   isLocked={!pool.isEditable}
                   result={res}
                   points={pts}
-                  isSubmitted={isPhaseSubmitted}
-                  showSubmittedChip={showSubmittedChip}
-                  showNotSubmittedChip={showNotSubmittedChip}
+                  showSavedIndicator={showSavedIndicator}
                 />
               );
             })}
@@ -363,12 +445,9 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
           />
 
           <ActionBar
-            predictionState={pool.predictionState}
-            onSubmitPredictions={handleSubmitPredictions}
-            canSubmitPredictions={pool.canSubmitPredictions}
+            submissionStatus={pool.submissionStatus}
             missingPredictionsCount={pool.missingPredictionsCount}
           />
-
           {!pool.isEditable && (
             <div
               className="widget"
@@ -388,16 +467,92 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
 
           <div
             style={{
-              marginBottom: "1.25rem",
-              color: "var(--text-secondary)",
-              fontWeight: 500,
-              fontSize: "0.98rem",
+              maxWidth: "980px",
+              margin: "0 auto 1.25rem",
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "1rem",
+              flexWrap: "wrap",
             }}
           >
-            Round of 32 — {pool.predictedInGroup}/{pool.totalInGroup} predicted
-            • Total: {pool.totalPredicted}/{pool.totalMatches}
-          </div>
+            <div
+              style={{
+                color: "var(--text-secondary)",
+                fontWeight: 500,
+                fontSize: "0.98rem",
+              }}
+            >
+              {pool.totalInGroup - pool.predictedInGroup} matches remaining in
+              the Round of 32 • {pool.totalPredicted} of {pool.totalMatches}
+              predictions saved
+            </div>
 
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                flexWrap: "wrap",
+                justifyContent: "flex-end",
+              }}
+            >
+              <span
+                style={{
+                  color: "var(--text-secondary)",
+                  fontWeight: 500,
+                  fontSize: "0.94rem",
+                }}
+              >
+                Filter matches by:
+              </span>
+              <div
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  padding: "0.25rem",
+                  borderRadius: "999px",
+                  border: "1px solid var(--border-subtle)",
+                  background: "rgba(255,255,255,0.04)",
+                }}
+              >
+                {[
+                  { key: "all", label: "All matches" },
+                  { key: "predicted", label: "Predicted" },
+                  { key: "unpredicted", label: "Not predicted" },
+                ].map((option) => {
+                  const isActive = matchFilter === option.key;
+
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => setMatchFilter(option.key as MatchFilter)}
+                      style={{
+                        border: "none",
+                        background: isActive
+                          ? "rgba(58, 112, 226, 0.20)"
+                          : "transparent",
+                        color: isActive
+                          ? "var(--text-primary)"
+                          : "var(--text-secondary)",
+                        padding: "0.5rem 0.8rem",
+                        borderRadius: "999px",
+                        cursor: "pointer",
+                        fontWeight: 600,
+                        fontSize: "0.9rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
           <div
             style={{
               maxWidth: "980px",
@@ -405,16 +560,17 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
               width: "100%",
             }}
           >
-            {knockoutMatches.map((match) => {
+            {filteredKnockoutMatches.map((match) => {
               const pred = pool.getPrediction(match.id);
-              const hasPrediction = pred.home !== null && pred.away !== null;
+              const matchSubmissionStatus = pool.getMatchSubmissionStatus(
+                match.id,
+              );
               const headerContextLabel = "Round of 32";
               const headerDateLabel = formatMatchDateLabel(
                 match.date,
                 match.time,
               );
-              const showSubmittedChip = isPhaseSubmitted && hasPrediction;
-              const showNotSubmittedChip = isPhaseSubmitted && !hasPrediction;
+              const showSavedIndicator = matchSubmissionStatus === "saved";
 
               return (
                 <MatchCard
@@ -432,9 +588,7 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
                   prediction={pred}
                   onPredictionChange={pool.handlePredictionChange}
                   isLocked={!pool.isEditable}
-                  isSubmitted={isPhaseSubmitted}
-                  showSubmittedChip={showSubmittedChip}
-                  showNotSubmittedChip={showNotSubmittedChip}
+                  showSavedIndicator={showSavedIndicator}
                 />
               );
             })}

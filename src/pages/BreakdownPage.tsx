@@ -12,7 +12,8 @@ type SortMode = "date" | "points";
 function BreakdownPage({ matches }: { matches: GroupStageMatch[] }) {
   const pool = usePoolState(matches);
   const resultsReady =
-    pool.predictionState === "locked" && Object.keys(pool.results).length > 0;
+    pool.rawPredictionState === "locked" &&
+    Object.keys(pool.results).length > 0;
 
   const pointFilters: { key: PointsFilter; label: string }[] = [
     { key: "all", label: "All" },

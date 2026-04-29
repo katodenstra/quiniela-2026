@@ -49,7 +49,8 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
     : friendsApi.error || predsApi.error;
 
   const resultsReady =
-    pool.predictionState === "locked" && Object.keys(pool.results).length > 0;
+    pool.rawPredictionState === "locked" &&
+    Object.keys(pool.results).length > 0;
   const { results, getPrediction } = pool;
 
   const [compareOn, setCompareOn] = useState(true);

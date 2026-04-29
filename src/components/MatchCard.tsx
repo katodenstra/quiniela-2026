@@ -18,11 +18,9 @@ type MatchCardProps = {
   isLocked: boolean;
   result?: { home: number; away: number };
   points?: number;
-  isSubmitted?: boolean;
   headerContextLabel?: string;
   headerDateLabel?: string;
-  showSubmittedChip?: boolean;
-  showNotSubmittedChip?: boolean;
+  showSavedIndicator?: boolean;
 };
 
 function MatchCard({
@@ -39,11 +37,9 @@ function MatchCard({
   isLocked,
   result,
   points,
-  isSubmitted = false,
   headerContextLabel,
   headerDateLabel,
-  showSubmittedChip,
-  showNotSubmittedChip,
+  showSavedIndicator,
 }: MatchCardProps) {
   const homeScore = prediction.home;
   const awayScore = prediction.away;
@@ -52,30 +48,32 @@ function MatchCard({
   const resolvedHeaderContextLabel = headerContextLabel ?? round;
   const resolvedHeaderDateLabel = headerDateLabel ?? kickoff;
 
-  const submittedChipVisible =
-    (showSubmittedChip ?? false) || (isSubmitted && !isLocked && hasPrediction);
-  const notSubmittedChipVisible =
-    (showNotSubmittedChip ?? false) || (isSubmitted && !isLocked && !hasPrediction);
-
-  const isHighlightVisible = submittedChipVisible;
+  const savedIndicatorVisible = showSavedIndicator ?? false;
+  const incompleteIndicatorVisible =
+    !savedIndicatorVisible && !isLocked && !hasPrediction;
 
   return (
     <div
       style={{
-        border: isHighlightVisible
-          ? "1px solid rgba(12, 157, 97, 0.24)"
-          : "1px solid var(--border-subtle)",
+        border: savedIndicatorVisible
+          ? "1px solid rgba(12, 157, 97, 0.22)"
+          : incompleteIndicatorVisible
+            ? "1px solid rgba(246, 183, 60, 0.24)"
+            : "1px solid var(--border-subtle)",
         borderRadius: "24px",
         padding: "1rem 1.1rem",
         marginBottom: "1rem",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+        background: incompleteIndicatorVisible
+          ? "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))"
+          : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
         boxShadow: isLocked
           ? "none"
-          : isHighlightVisible
-            ? "0 0 0 1px rgba(12, 157, 97, 0.08), var(--shadow-soft)"
-            : "var(--shadow-soft)",
-        opacity: isLocked ? 0.9 : 1,
+          : savedIndicatorVisible
+            ? "0 0 0 1px rgba(12, 157, 97, 0.06), var(--shadow-soft)"
+            : incompleteIndicatorVisible
+              ? "0 0 0 1px rgba(246, 183, 60, 0.06), var(--shadow-soft)"
+              : "var(--shadow-soft)",
+        opacity: isLocked ? 0.9 : hasPrediction ? 1 : 0.96,
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
       }}
@@ -123,46 +121,36 @@ function MatchCard({
             minWidth: "fit-content",
           }}
         >
-          {submittedChipVisible && (
-            <div
+          {savedIndicatorVisible && (
+            <span
+              aria-label="Saved"
+              title="Saved"
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "0.32rem 0.8rem",
+                display: "inline-block",
+                width: "0.7rem",
+                height: "0.7rem",
                 borderRadius: "999px",
-                background: "rgba(12, 157, 97, 0.12)",
-                border: "1px solid rgba(12, 157, 97, 0.18)",
-                color: "var(--text-primary)",
-                fontSize: "0.78rem",
-                fontWeight: 600,
-                lineHeight: 1.1,
-                whiteSpace: "nowrap",
+                background: "var(--success-600, #47b881)",
+                boxShadow: "0 0 0 4px rgba(71, 184, 129, 0.08)",
+                flexShrink: 0,
               }}
-            >
-              Submitted
-            </div>
+            />
           )}
-
-          {notSubmittedChipVisible && (
-            <div
+          {incompleteIndicatorVisible && (
+            <span
+              aria-label="Incomplete"
+              title="Incomplete"
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "0.32rem 0.8rem",
+                display: "inline-block",
+                width: "0.7rem",
+                height: "0.7rem",
                 borderRadius: "999px",
-                background: "rgba(255, 173, 13, 0.12)",
-                border: "1px solid rgba(255, 173, 13, 0.18)",
-                color: "var(--text-primary)",
-                fontSize: "0.78rem",
-                fontWeight: 600,
-                lineHeight: 1.1,
-                whiteSpace: "nowrap",
+                background: "var(--warning-500, #f6b73c)",
+                opacity: 0.9,
+                boxShadow: "0 0 0 4px rgba(246, 183, 60, 0.08)",
+                flexShrink: 0,
               }}
-            >
-              Not submitted
-            </div>
+            />
           )}
         </div>
       </div>

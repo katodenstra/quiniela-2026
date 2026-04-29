@@ -6,6 +6,13 @@ export type PredictionsByMatchId = Record<number, Prediction>;
 export type PredictionState = "draft" | "submitted" | "locked";
 export type PredictionStateByPhase = Record<TournamentPhase, PredictionState>;
 export type CompletionStatus = "empty" | "partial" | "complete";
+
+export type SubmissionStatus = "in-progress" | "locked";
+export type MatchSubmissionStatus =
+  | "empty"
+  | "saved"
+  | "locked-empty"
+  | "locked-saved";
 export type Result = { home: number; away: number };
 export type ResultsByMatchId = Record<number, Result>;
 export type { GroupId };
@@ -357,20 +364,33 @@ export function usePoolState<
     }, 0);
   }, [phaseMatches, predictions, phase]);
 
-  const predictionState: PredictionState =
-    rawPredictionState === "submitted" && totalPredicted === 0
-      ? "draft"
-      : rawPredictionState;
-
   const missingPredictionsCount = Math.max(
     phaseMatches.length - totalPredicted,
     0,
   );
 
-  const isEditable = predictionState !== "locked";
+  const predictionState: PredictionState =
+    rawPredictionState === "submitted" ? "draft" : rawPredictionState;
 
-  const canSubmitPredictions =
-    totalPredicted > 0 && predictionState !== "locked";
+  const isDraft = predictionState === "draft";
+  const isLocked = rawPredictionState === "locked";
+
+  const submissionStatus: SubmissionStatus = isLocked
+    ? "locked"
+    : "in-progress";
+
+  const getMatchSubmissionStatus = (matchId: number): MatchSubmissionStatus => {
+    const pred = predictions[phase]?.[matchId];
+    const hasPrediction = isPredictionComplete(pred);
+
+    if (rawPredictionState === "locked") {
+      return hasPrediction ? "locked-saved" : "locked-empty";
+    }
+
+    return hasPrediction ? "saved" : "empty";
+  };
+
+  const isEditable = !isLocked;
 
   const groupCompletion = useMemo(() => {
     return groups.reduce<Record<GroupId, CompletionStatus>>(
@@ -432,7 +452,7 @@ export function usePoolState<
   return {
     predictions,
     results,
-    predictionState,
+    rawPredictionState,
     selectedGroup: activeGroup,
     groups,
     visibleMatches,
@@ -457,8 +477,11 @@ export function usePoolState<
     setPhase,
     fillMyPredictionsForCurrentPhase,
     missingPredictionsCount,
+    isDraft,
+    isLocked,
+    submissionStatus,
+    getMatchSubmissionStatus,
     isEditable,
-    canSubmitPredictions,
     groupCompletion,
     matchdayCompletion,
   };

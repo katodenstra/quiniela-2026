@@ -23,7 +23,8 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
     [generatedFriendPredictions, pool.phase],
   );
 
-  const usingGeneratedPredictions = Object.keys(phaseFriendPredictions).length > 0;
+  const usingGeneratedPredictions =
+    Object.keys(phaseFriendPredictions).length > 0;
 
   useEffect(() => {
     let alive = true;
@@ -48,7 +49,8 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
   }, []);
 
   const resultsReady =
-    pool.predictionState === "locked" && Object.keys(pool.results).length > 0;
+    pool.rawPredictionState === "locked" &&
+    Object.keys(pool.results).length > 0;
 
   const myEntry: Entry = useMemo(() => {
     if (!resultsReady) return { id: "me", name: "You", points: null };
@@ -152,7 +154,8 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
             lineHeight: 1.45,
           }}
         >
-          Leaderboard is currently using generated friend prediction data for this phase.
+          Leaderboard is currently using generated friend prediction data for
+          this phase.
         </div>
       )}
 

@@ -1,66 +1,23 @@
-import type { PredictionState } from "../state/usePoolState";
-import Button from "./Button";
+import type { SubmissionStatus } from "../state/usePoolState";
 
 type ActionBarProps = {
-  predictionState: PredictionState;
-  onSubmitPredictions: () => void;
-  canSubmitPredictions: boolean;
+  submissionStatus: SubmissionStatus;
   missingPredictionsCount: number;
 };
 
 function ActionBar({
-  predictionState,
-  onSubmitPredictions,
-  canSubmitPredictions,
+  submissionStatus,
   missingPredictionsCount,
 }: ActionBarProps) {
   return (
     <div style={{ marginBottom: "1.5rem" }}>
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "1rem",
-          flexWrap: "wrap",
-          marginBottom: "0.85rem",
-        }}
-      >
-        <Button
-          variant={predictionState === "submitted" ? "success" : "ghost"}
-          onClick={onSubmitPredictions}
-          disabled={!canSubmitPredictions}
-        >
-          Submit predictions
-        </Button>
-
-        <span
-          style={{
-            padding: "0.35rem 0.7rem",
-            borderRadius: "999px",
-            border: "1px solid var(--border-subtle)",
-            background:
-              predictionState === "locked"
-                ? "rgba(236, 45, 48, 0.14)"
-                : predictionState === "submitted"
-                  ? "rgba(12, 157, 97, 0.18)"
-                  : "rgba(255,255,255,0.04)",
-            color: "var(--text-primary)",
-            fontSize: "0.85rem",
-            fontWeight: 700,
-          }}
-        >
-          {predictionState.toUpperCase()}
-        </span>
-      </div>
-
-      <div
-        style={{
           display: "grid",
           gap: "0.45rem",
         }}
       >
-        {predictionState === "draft" && (
+        {submissionStatus === "in-progress" && (
           <div
             style={{
               color: "var(--text-muted)",
@@ -69,26 +26,12 @@ function ActionBar({
               lineHeight: 1.45,
             }}
           >
-            Keep filling your predictions. You can submit even if some matches
-            are still missing.
+            Predictions save automatically as you fill each match. You can keep
+            editing them until this phase locks.
           </div>
         )}
 
-        {predictionState === "submitted" && (
-          <div
-            style={{
-              color: "var(--text-muted)",
-              fontSize: "0.92rem",
-              fontWeight: 500,
-              lineHeight: 1.45,
-            }}
-          >
-            Predictions submitted. You can still edit them until the tournament
-            starts or results are simulated.
-          </div>
-        )}
-
-        {predictionState === "locked" && (
+        {submissionStatus === "locked" && (
           <div
             style={{
               color: "var(--text-muted)",
@@ -101,15 +44,27 @@ function ActionBar({
           </div>
         )}
 
-        {missingPredictionsCount > 0 && predictionState !== "locked" && (
+        {missingPredictionsCount > 0 && submissionStatus !== "locked" && (
           <div
             style={{
-              color: "var(--warning-500, #f6b73c)",
+              color: "var(--text-secondary)",
               fontSize: "0.92rem",
               fontWeight: 600,
             }}
           >
             {missingPredictionsCount} matches still need predictions.
+          </div>
+        )}
+
+        {missingPredictionsCount === 0 && submissionStatus !== "locked" && (
+          <div
+            style={{
+              color: "var(--success-600, #47b881)",
+              fontSize: "0.92rem",
+              fontWeight: 600,
+            }}
+          >
+            All current predictions are saved.
           </div>
         )}
       </div>
