@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AppGroupId as GroupId, ViewMode } from "../data/worldcup";
+import type {
+  AppGroupId as GroupId,
+  GroupStageMatch,
+  ViewMode,
+} from "../data/worldcup";
+import type { KnockoutMatch } from "../data/knockout";
+import { generateRoundOf32 } from "../data/knockout";
+import { getBestThirdPlacedTeams } from "../data/qualification";
+import { calculateGroupStandings } from "../data/standings";
 
 export type Prediction = { home: number | null; away: number | null };
 export type PredictionsByMatchId = Record<number, Prediction>;
@@ -55,9 +63,9 @@ export function randomScore() {
   return Math.floor(Math.random() * 5);
 }
 
-export function usePoolState<
-  M extends { id: number; group: GroupId | null; matchday?: number | null },
->(matches: M[]) {
+type PhaseMatch = GroupStageMatch | KnockoutMatch;
+
+export function usePoolState(matches: GroupStageMatch[]) {
   const emptyPredictionsByPhase: PredictionsByPhase = {
     groups: {},
     roundOf32: {},
@@ -177,6 +185,62 @@ export function usePoolState<
 
   const rawPredictionState = predictionStateByPhase[phase];
 
+  const groups = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          matches
+            .map((m) => m.group)
+            .filter((group): group is GroupId => group !== null),
+        ),
+      ),
+    [matches],
+  );
+
+  const groupPhaseMatches = useMemo(
+    () => matches.filter((match) => match.group !== null),
+    [matches],
+  );
+
+  const groupsResolved = useMemo(
+    () =>
+      groupPhaseMatches.length > 0 &&
+      groupPhaseMatches.every((match) => results[match.id] !== undefined),
+    [groupPhaseMatches, results],
+  );
+
+  const standingsByGroup = useMemo(
+    () =>
+      groupsResolved
+        ? Object.fromEntries(
+            groups.map((group) => [
+              group,
+              calculateGroupStandings(matches, results, group),
+            ]),
+          )
+        : {},
+    [groups, groupsResolved, matches, results],
+  );
+
+  const bestThirds = useMemo(
+    () => (groupsResolved ? getBestThirdPlacedTeams(standingsByGroup) : []),
+    [groupsResolved, standingsByGroup],
+  );
+
+  const roundOf32Matches = useMemo(
+    () =>
+      groupsResolved && bestThirds.length >= 8
+        ? generateRoundOf32(standingsByGroup, bestThirds)
+        : [],
+    [groupsResolved, standingsByGroup, bestThirds],
+  );
+
+  const getMatchesForPhase = (targetPhase: TournamentPhase): PhaseMatch[] => {
+    if (targetPhase === "groups") return groupPhaseMatches;
+    if (targetPhase === "roundOf32") return roundOf32Matches;
+    return [];
+  };
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(predictions));
@@ -233,15 +297,8 @@ export function usePoolState<
   };
 
   const fillMyPredictionsForCurrentPhase = () => {
-    let phaseMatches: M[];
-
-    if (phase === "groups") {
-      phaseMatches = matches.filter((match) => match.group !== null);
-    } else if (phase === "roundOf32") {
-      phaseMatches = matches;
-    } else {
-      phaseMatches = visibleMatches;
-    }
+    const phaseMatches = getMatchesForPhase(phase);
+    if (phaseMatches.length === 0) return;
 
     const nextPredictions = phaseMatches.reduce<PredictionsByMatchId>(
       (acc, match) => {
@@ -284,15 +341,36 @@ export function usePoolState<
     localStorage.setItem(PHASE_KEY, "groups");
   };
 
+  const resetCurrentPhase = () => {
+    const phaseMatches = getMatchesForPhase(phase);
+    const matchIds = new Set(phaseMatches.map((match) => match.id));
+
+    setPredictions((prev) => ({
+      ...prev,
+      [phase]: {},
+    }));
+
+    setResults((prev) => {
+      const next = { ...prev };
+      matchIds.forEach((matchId) => {
+        delete next[matchId];
+      });
+      return next;
+    });
+
+    setPredictionStateByPhase((prev) => ({
+      ...prev,
+      [phase]: "draft",
+    }));
+  };
+
   const simulateCurrentStage = () => {
+    const matchesToSimulate = getMatchesForPhase(phase);
+    if (matchesToSimulate.length === 0) return;
+
     const nextResults: ResultsByMatchId = {
       ...results,
     };
-
-    const matchesToSimulate =
-      phase === "groups"
-        ? matches.filter((match) => match.group !== null)
-        : visibleMatches;
 
     for (const match of matchesToSimulate) {
       nextResults[match.id] = { home: randomScore(), away: randomScore() };
@@ -317,18 +395,6 @@ export function usePoolState<
     );
     localStorage.setItem(PHASE_KEY, "groups");
   };
-
-  const groups = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          matches
-            .map((m) => m.group)
-            .filter((group): group is GroupId => group !== null),
-        ),
-      ),
-    [matches],
-  );
 
   const activeGroup = useMemo(() => {
     if (groups.length === 0) return selectedGroup;
@@ -355,12 +421,10 @@ export function usePoolState<
   }, [visibleMatches, predictions, phase]);
 
   const phaseMatches = useMemo(() => {
-    if (phase === "groups") {
-      return matches.filter((m) => m.group !== null);
-    }
-
-    return matches;
-  }, [matches, phase]);
+    if (phase === "groups") return groupPhaseMatches;
+    if (phase === "roundOf32") return roundOf32Matches;
+    return [];
+  }, [phase, groupPhaseMatches, roundOf32Matches]);
 
   const totalPredicted = useMemo(() => {
     return phaseMatches.reduce((count, m) => {
@@ -471,6 +535,7 @@ export function usePoolState<
     handlePredictionChange,
     getPrediction,
     resetDraft,
+    resetCurrentPhase,
     simulateCurrentStage,
     resetSimulation,
     viewMode,
@@ -491,3 +556,5 @@ export function usePoolState<
     matchdayCompletion,
   };
 }
+
+export type PoolState = ReturnType<typeof usePoolState>;

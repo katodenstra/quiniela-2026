@@ -180,6 +180,75 @@ function AdminSimulationPanel({
             style={{
               display: "flex",
               flexDirection: "column",
+              gap: "0.45rem",
+            }}
+          >
+            <label
+              htmlFor="admin-phase"
+              style={{
+                color: "var(--text-secondary)",
+                fontSize: "0.88rem",
+                fontWeight: 600,
+              }}
+            >
+              Active admin phase
+            </label>
+
+            <div
+              style={{
+                position: "relative",
+              }}
+            >
+              <select
+                id="admin-phase"
+                value={phase}
+                onChange={(e) => setPhase(e.target.value as TournamentPhase)}
+                style={{
+                  width: "100%",
+                  padding: "0.82rem 2.75rem 0.82rem 0.95rem",
+                  borderRadius: "999px",
+                  border: "1px solid var(--border-subtle)",
+                  background: "rgba(255,255,255,0.04)",
+                  color: "var(--text-primary)",
+                  fontWeight: 600,
+                  outline: "none",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  MozAppearance: "none",
+                  boxShadow: "var(--shadow-soft)",
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
+                }}
+              >
+                {phaseOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              <span
+                className="material-symbols-rounded"
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: "0.9rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "var(--text-secondary)",
+                  pointerEvents: "none",
+                  fontSize: "1.15rem",
+                }}
+              >
+                expand_more
+              </span>
+            </div>
+          </section>
+
+          <section
+            style={{
+              display: "flex",
+              flexDirection: "column",
               gap: "0.85rem",
             }}
           >
@@ -217,75 +286,6 @@ function AdminSimulationPanel({
               }}
             >
               Simulation
-            </div>
-
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.45rem",
-              }}
-            >
-              <label
-                htmlFor="admin-phase"
-                style={{
-                  color: "var(--text-secondary)",
-                  fontSize: "0.88rem",
-                  fontWeight: 600,
-                }}
-              >
-                Tournament phase
-              </label>
-
-              <div
-                style={{
-                  position: "relative",
-                }}
-              >
-                <select
-                  id="admin-phase"
-                  value={phase}
-                  onChange={(e) => setPhase(e.target.value as TournamentPhase)}
-                  style={{
-                    width: "100%",
-                    padding: "0.82rem 2.75rem 0.82rem 0.95rem",
-                    borderRadius: "999px",
-                    border: "1px solid var(--border-subtle)",
-                    background: "rgba(255,255,255,0.04)",
-                    color: "var(--text-primary)",
-                    fontWeight: 600,
-                    outline: "none",
-                    appearance: "none",
-                    WebkitAppearance: "none",
-                    MozAppearance: "none",
-                    boxShadow: "var(--shadow-soft)",
-                    backdropFilter: "blur(10px)",
-                    WebkitBackdropFilter: "blur(10px)",
-                  }}
-                >
-                  {phaseOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-
-                <span
-                  className="material-symbols-rounded"
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    right: "0.9rem",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    color: "var(--text-secondary)",
-                    pointerEvents: "none",
-                    fontSize: "1.15rem",
-                  }}
-                >
-                  expand_more
-                </span>
-              </div>
             </div>
 
             <Button variant="primary" onClick={onRunSimulation}>

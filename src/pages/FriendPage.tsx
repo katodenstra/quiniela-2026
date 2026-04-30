@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { getFriends, getFriendPredictions, type Friend } from "../api/mockApi";
-import { scorePrediction, usePoolState } from "../state/usePoolState";
+import {
+  getAllFriendPredictions,
+  getFriends,
+  type Friend,
+} from "../api/mockApi";
+import { scorePrediction } from "../state/usePoolState";
 import type {
+  PoolState,
   PredictionsByMatchId,
   TournamentPhase,
 } from "../state/usePoolState";
@@ -21,9 +26,17 @@ import {
   scorableComparisonPhases,
   type PhaseScoringContext,
 } from "../utils/phaseScoring";
+import {
+  buildLeaderboardEntries,
+  getLeaderboardRank,
+  sortLeaderboardEntries,
+} from "../utils/leaderboardRanking";
 
 type PredictionsBySupportedPhase = Partial<
   Record<TournamentPhase, PredictionsByMatchId>
+>;
+type AllFriendPredictionsByPhase = Partial<
+  Record<TournamentPhase, Record<string, PredictionsByMatchId>>
 >;
 
 type ExpandedSections = Partial<Record<TournamentPhase, boolean>>;
@@ -40,8 +53,13 @@ function getDefaultExpandedSections(
   );
 }
 
-function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
-  const pool = usePoolState(matches);
+function FriendPage({
+  matches,
+  pool,
+}: {
+  matches: GroupStageMatch[];
+  pool: PoolState;
+}) {
   const { friendId: rawFriendId } = useParams<{ friendId: string }>();
   const friendId = useMemo(() => {
     if (!rawFriendId) return undefined;
@@ -56,6 +74,8 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
   const { generatedFriendPredictions } = useFriendPredictions();
   const [friendPredictionsByPhase, setFriendPredictionsByPhase] =
     useState<PredictionsBySupportedPhase>({});
+  const [allFriendPredictionsByPhase, setAllFriendPredictionsByPhase] =
+    useState<AllFriendPredictionsByPhase>({});
   const [predictionsLoading, setPredictionsLoading] = useState(true);
   const [predictionsError, setPredictionsError] = useState<string | null>(null);
   const [predictionsRetryKey, setPredictionsRetryKey] = useState(0);
@@ -91,16 +111,33 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
       try {
         const entries = await Promise.all(
           scorableComparisonPhases.map(async (phase) => {
-            const generated = generatedFriendPredictions[phase]?.[friendId];
-            const predictions =
-              generated ?? (await getFriendPredictions(friendId, phase));
+            const apiPredictions = await getAllFriendPredictions(phase);
+            const generatedPredictions = generatedFriendPredictions[phase] ?? {};
 
-            return [phase, predictions] as const;
+            return [
+              phase,
+              {
+                ...apiPredictions,
+                ...generatedPredictions,
+              },
+            ] as const;
           }),
         );
 
         if (!alive) return;
-        setFriendPredictionsByPhase(Object.fromEntries(entries));
+        const nextAllPredictions = Object.fromEntries(
+          entries,
+        ) as AllFriendPredictionsByPhase;
+
+        setAllFriendPredictionsByPhase(nextAllPredictions);
+        setFriendPredictionsByPhase(
+          Object.fromEntries(
+            scorableComparisonPhases.map((phase) => [
+              phase,
+              nextAllPredictions[phase]?.[friendId],
+            ]),
+          ),
+        );
       } catch (e: unknown) {
         if (!alive) return;
         setPredictionsError(
@@ -161,6 +198,7 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
           hasFriendPrediction &&
           hasMyPrediction &&
           (friendPred.home !== myPred.home || friendPred.away !== myPred.away);
+        const isSame = hasFriendPrediction && hasMyPrediction && !isDiff;
         const pts =
           hasFriendPrediction && res ? scorePrediction(friendPred, res) : null;
         const friendScoreText = hasFriendPrediction
@@ -175,6 +213,7 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
           res,
           pts,
           isDiff,
+          isSame,
           hasFriendPrediction,
           hasMyPrediction,
           friendScoreText,
@@ -186,6 +225,14 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
         ...context,
         friendPoints,
         myPoints,
+        sameCount: rows.reduce(
+          (count, row) => count + (row.isSame ? 1 : 0),
+          0,
+        ),
+        differentCount: rows.reduce(
+          (count, row) => count + (row.isDiff ? 1 : 0),
+          0,
+        ),
         rows,
       };
     });
@@ -200,22 +247,25 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
     );
   }, [phaseSections, resultsReady]);
 
-  const diffCount = useMemo(() => {
-    if (!compareOn) return 0;
-    return phaseSections.reduce(
-      (count, section) =>
-        count + section.rows.reduce((sum, row) => sum + (row.isDiff ? 1 : 0), 0),
-      0,
+  const leaderboard = useMemo(() => {
+    return sortLeaderboardEntries(
+      buildLeaderboardEntries({
+        friends: friendsApi.data ?? [],
+        myPredictions: pool.predictions,
+        friendPredictionsByPhase: allFriendPredictionsByPhase,
+        resolvedPhaseContexts,
+        results: pool.results,
+      }),
     );
-  }, [phaseSections, compareOn]);
+  }, [
+    friendsApi.data,
+    pool.predictions,
+    allFriendPredictionsByPhase,
+    resolvedPhaseContexts,
+    pool.results,
+  ]);
 
-  const comparableCount = useMemo(() => {
-    return phaseSections.reduce(
-      (count, section) =>
-        count + (section.isAvailable ? section.rows.length : 0),
-      0,
-    );
-  }, [phaseSections]);
+  const friendRank = friendId ? getLeaderboardRank(leaderboard, friendId) : null;
 
   if (loading) {
     return (
@@ -253,6 +303,7 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
           onClick={() => {
             friendsApi.refetch();
             setFriendPredictionsByPhase({});
+            setAllFriendPredictionsByPhase({});
             setPredictionsRetryKey((key) => key + 1);
           }}
         >
@@ -295,6 +346,13 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
         Total points:{" "}
         <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>
           {friendTotal === null ? "-" : friendTotal}
+        </span>
+        <span style={{ color: "var(--text-muted)", margin: "0 0.45rem" }}>
+          •
+        </span>
+        Rank{" "}
+        <span style={{ color: "var(--text-primary)", fontWeight: 700 }}>
+          {friendRank === null ? "-" : `#${friendRank}`}
         </span>
       </div>
 
@@ -349,18 +407,6 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
           />
           Show only differences
         </label>
-
-        {compareOn && (
-          <div
-            style={{
-              marginLeft: "auto",
-              fontWeight: 700,
-              color: "var(--text-primary)",
-            }}
-          >
-            Different: {diffCount}/{comparableCount}
-          </div>
-        )}
       </div>
 
       {!resultsReady && (
@@ -402,6 +448,7 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
               <button
                 type="button"
                 disabled={!section.isAvailable}
+                aria-expanded={section.isAvailable ? isExpanded : undefined}
                 onClick={() =>
                   setExpandedSections((prev) => ({
                     ...prev,
@@ -422,30 +469,44 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
                   textAlign: "left",
                 }}
               >
-                <div style={{ minWidth: 0 }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
                   <div
                     style={{
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: "0.35rem",
+                      flexWrap: "wrap",
                       color: "var(--text-primary)",
                       fontWeight: 700,
                       fontSize: "1rem",
                     }}
                   >
-                    {section.title}
+                    <span>{section.title}</span>
+                    <span style={{ color: "var(--text-muted)" }}>-</span>
+                    <span style={{ color: "var(--text-secondary)" }}>
+                      {section.isAvailable
+                        ? `${section.matches.length} matches`
+                        : "Unavailable"}
+                    </span>
                   </div>
-                  <div
-                    style={{
-                      color: "var(--text-muted)",
-                      fontSize: "0.9rem",
-                      marginTop: "0.18rem",
-                    }}
-                  >
-                    {section.isAvailable
-                      ? `${section.matches.length} matches`
-                      : "Unavailable"}
-                    {compareOn && section.isAvailable
-                      ? ` • You: ${section.myPoints ?? "-"} pts`
-                      : ""}
-                  </div>
+
+                  {compareOn && section.isAvailable && (
+                    <div
+                      style={{
+                        color: "var(--text-muted)",
+                        fontSize: "0.9rem",
+                        marginTop: "0.28rem",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "0.45rem",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      <span>You made {section.myPoints ?? "-"} points</span>
+                      <span>Same picks: {section.sameCount}</span>
+                      <span>Different picks: {section.differentCount}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div
@@ -456,12 +517,19 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
                     flexShrink: 0,
                   }}
                 >
-                  <div style={{ textAlign: "right" }}>
+                  <div
+                    style={{
+                      textAlign: "right",
+                      minWidth: "3.2rem",
+                      padding: "0.15rem 0",
+                    }}
+                  >
                     <div
                       style={{
                         color: "var(--text-primary)",
                         fontWeight: 800,
-                        fontSize: "1.1rem",
+                        fontSize: "1.35rem",
+                        lineHeight: 1,
                       }}
                     >
                       {section.friendPoints ?? "-"}
@@ -470,7 +538,9 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
                       style={{
                         color: "var(--text-muted)",
                         fontSize: "0.78rem",
-                        marginTop: "0.08rem",
+                        marginTop: "0.18rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
                       }}
                     >
                       pts
@@ -478,14 +548,25 @@ function FriendPage({ matches }: { matches: GroupStageMatch[] }) {
                   </div>
                   <span
                     style={{
+                      width: "2.1rem",
+                      height: "2.1rem",
+                      borderRadius: "999px",
+                      display: "grid",
+                      placeItems: "center",
+                      border: "1px solid var(--border-subtle)",
+                      background: section.isAvailable
+                        ? "rgba(255,255,255,0.06)"
+                        : "rgba(255,255,255,0.03)",
                       color: "var(--text-secondary)",
-                      fontWeight: 800,
                       transform: isExpanded ? "rotate(180deg)" : "none",
-                      transition: "transform 140ms ease",
+                      transition:
+                        "transform 140ms ease, background 140ms ease, border-color 140ms ease",
                     }}
                     aria-hidden="true"
                   >
-                    v
+                    <span className="material-symbols-rounded">
+                      expand_more
+                    </span>
                   </span>
                 </div>
               </button>

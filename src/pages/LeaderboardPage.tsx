@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { getFriends, getFriendPredictions, type Friend } from "../api/mockApi";
-import { usePoolState, type TournamentPhase } from "../state/usePoolState";
+import type { PoolState, TournamentPhase } from "../state/usePoolState";
 import { Link } from "react-router-dom";
 import StatusBanner from "../components/StatusBanner";
 import PageIntro from "../components/PageIntro";
@@ -13,16 +13,18 @@ import {
   getPhaseScoringContexts,
   scorableComparisonPhases,
 } from "../utils/phaseScoring";
+import {
+  sortLeaderboardEntries,
+  type LeaderboardEntry,
+} from "../utils/leaderboardRanking";
 
-type Entry = {
-  id: string;
-  name: string;
-  points: number | null;
-  pointsByPhase: Partial<Record<TournamentPhase, number>>;
-};
-
-function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
-  const pool = usePoolState(matches);
+function LeaderboardPage({
+  matches,
+  pool,
+}: {
+  matches: GroupStageMatch[];
+  pool: PoolState;
+}) {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
   const [entriesLoading, setEntriesLoading] = useState(false);
@@ -72,7 +74,7 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
 
   const resultsReady = resolvedPhaseContexts.length > 0;
 
-  const myEntry: Entry = useMemo(() => {
+  const myEntry: LeaderboardEntry = useMemo(() => {
     if (!resultsReady) {
       return {
         id: "me",
@@ -109,7 +111,7 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
     };
   }, [resultsReady, resolvedPhaseContexts, pool.predictions, pool.results]);
 
-  const [friendEntries, setFriendEntries] = useState<Entry[]>([]);
+  const [friendEntries, setFriendEntries] = useState<LeaderboardEntry[]>([]);
 
   useEffect(() => {
     let alive = true;
@@ -198,13 +200,7 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
   ]);
 
   const leaderboard = useMemo(() => {
-    const all = [myEntry, ...friendEntries];
-    // null points (not simulated) should stay at bottom
-    return all.sort((a, b) => {
-      const ap = a.points ?? -1;
-      const bp = b.points ?? -1;
-      return bp - ap;
-    });
+    return sortLeaderboardEntries([myEntry, ...friendEntries]);
   }, [myEntry, friendEntries]);
 
   const isLeaderboardLoading = loading || entriesLoading;

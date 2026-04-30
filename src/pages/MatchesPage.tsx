@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import MatchCard from "../components/MatchCard";
 import GroupTabs from "../components/GroupTabs";
 import ActionBar from "../components/ActionBar";
-import { scorePrediction, usePoolState } from "../state/usePoolState";
+import { scorePrediction, type PoolState } from "../state/usePoolState";
 import PageIntro from "../components/PageIntro";
 import type { GroupStageMatch } from "../data/worldcup";
 import GroupStandingsTable from "../components/GroupStandingsTable";
@@ -15,8 +15,6 @@ import {
 } from "../data/qualification";
 import KnockoutBracket from "../components/KnockoutBracket";
 import { generateRoundOf32 } from "../data/knockout";
-import AdminSimulationPanel from "../components/AdminSimulationPanel";
-import { getAllFriendPredictions } from "../api/mockApi";
 import { useFriendPredictions } from "../state/FriendPredictionsContext";
 
 import ScrollableTabs from "../components/ScrollableTabs";
@@ -28,15 +26,16 @@ function formatMatchDateLabel(date: string, time: string) {
   return `${day}/${month}/${year} • ${time}`;
 }
 
-function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
-  const pool = usePoolState(matches);
+function MatchesPage({
+  matches,
+  pool,
+}: {
+  matches: GroupStageMatch[];
+  pool: PoolState;
+}) {
   const {
-    setGeneratedFriendPredictionsForPhase,
     generatedFriendPredictions,
-    clearGeneratedFriendPredictionsForPhase,
-    clearGeneratedFriendPredictions,
   } = useFriendPredictions();
-  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const [matchFilter, setMatchFilter] = useState<MatchFilter>("all");
   const isGroupPhase = pool.phase === "groups";
   const isRoundOf32Phase = pool.phase === "roundOf32";
@@ -51,14 +50,18 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
     hasGroupResults &&
     pool.visibleMatches.length > 0;
 
-  const standingsByGroup = hasGroupResults
-    ? Object.fromEntries(
-        pool.groups.map((group) => [
-          group,
-          calculateGroupStandings(matches, pool.results, group),
-        ]),
-      )
-    : {};
+  const standingsByGroup = useMemo(
+    () =>
+      hasGroupResults
+        ? Object.fromEntries(
+            pool.groups.map((group) => [
+              group,
+              calculateGroupStandings(matches, pool.results, group),
+            ]),
+          )
+        : {},
+    [hasGroupResults, matches, pool.results, pool.groups],
+  );
 
   const qualifiedThirdGroups = hasGroupResults
     ? getQualifiedThirdGroupSet(standingsByGroup)
@@ -68,16 +71,24 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
     ? (standingsByGroup[pool.selectedGroup] ?? [])
     : [];
 
-  const bestThirds = hasGroupResults
-    ? getBestThirdPlacedTeams(standingsByGroup)
-    : [];
+  const bestThirds = useMemo(
+    () =>
+      hasGroupResults ? getBestThirdPlacedTeams(standingsByGroup) : [],
+    [hasGroupResults, standingsByGroup],
+  );
 
-  const roundOf32 =
-    hasGroupResults && bestThirds.length >= 8
-      ? generateRoundOf32(standingsByGroup, bestThirds)
-      : [];
+  const roundOf32 = useMemo(
+    () =>
+      hasGroupResults && bestThirds.length >= 8
+        ? generateRoundOf32(standingsByGroup, bestThirds)
+        : [],
+    [hasGroupResults, bestThirds, standingsByGroup],
+  );
 
-  const knockoutMatches = pool.phase === "roundOf32" ? roundOf32 : [];
+  const knockoutMatches = useMemo(
+    () => (pool.phase === "roundOf32" ? roundOf32 : []),
+    [pool.phase, roundOf32],
+  );
 
   const filteredVisibleMatches = useMemo(() => {
     return pool.visibleMatches.filter((match) => {
@@ -88,7 +99,7 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
       if (matchFilter === "unpredicted") return !isPredicted;
       return true;
     });
-  }, [pool.visibleMatches, pool, matchFilter]);
+  }, [pool, matchFilter]);
 
   const filteredKnockoutMatches = useMemo(() => {
     return knockoutMatches.filter((match) => {
@@ -113,22 +124,6 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
     knockoutMatches.length - roundOf32PredictedCount,
     0,
   );
-
-  const handleGenerateFriendsPredictions = async () => {
-    const next = await getAllFriendPredictions(pool.phase);
-    setGeneratedFriendPredictionsForPhase(pool.phase, next);
-    console.log("Generated friend predictions for phase:", pool.phase, next);
-  };
-
-  const handleResetCurrentPhase = () => {
-    clearGeneratedFriendPredictionsForPhase(pool.phase);
-    pool.resetDraft();
-  };
-
-  const handleResetTournament = () => {
-    clearGeneratedFriendPredictions();
-    pool.resetSimulation();
-  };
 
   const generatedFriendsCount = Object.keys(
     generatedFriendPredictions[pool.phase] ?? {},
@@ -661,18 +656,6 @@ function MatchesPage({ matches }: { matches: GroupStageMatch[] }) {
           {generatedFriendsCount} friend sets loaded
         </div>
       )}
-      <AdminSimulationPanel
-        open={adminPanelOpen}
-        onOpen={() => setAdminPanelOpen(true)}
-        onClose={() => setAdminPanelOpen(false)}
-        phase={pool.phase}
-        setPhase={pool.setPhase}
-        onRunSimulation={pool.simulateCurrentStage}
-        onResetPhase={handleResetCurrentPhase}
-        onResetTournament={handleResetTournament}
-        onFillMyPredictions={pool.fillMyPredictionsForCurrentPhase}
-        onGenerateFriendsPredictions={handleGenerateFriendsPredictions}
-      />
     </section>
   );
 }

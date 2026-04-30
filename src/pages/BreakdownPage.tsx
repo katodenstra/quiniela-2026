@@ -3,14 +3,18 @@ import EmptyState from "../components/EmptyState";
 import GroupTabs from "../components/GroupTabs";
 import PageIntro from "../components/PageIntro";
 //import StatusBanner from "../components/StatusBanner";
-import { scorePrediction, usePoolState } from "../state/usePoolState";
+import { scorePrediction, type PoolState } from "../state/usePoolState";
 import type { GroupStageMatch } from "../data/worldcup";
 
 type PointsFilter = "all" | 3 | 1 | 0;
 type SortMode = "date" | "points";
 
-function BreakdownPage({ matches }: { matches: GroupStageMatch[] }) {
-  const pool = usePoolState(matches);
+function BreakdownPage({
+  pool,
+}: {
+  matches: GroupStageMatch[];
+  pool: PoolState;
+}) {
   const resultsReady =
     pool.rawPredictionState === "locked" &&
     Object.keys(pool.results).length > 0;
