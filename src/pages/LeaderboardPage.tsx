@@ -1,67 +1,37 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { getFriends, getFriendPredictions, type Friend } from "../api/mockApi";
-import {
-  scorePrediction,
-  usePoolState,
-  type Prediction,
-} from "../state/usePoolState";
-import { useNavigate } from "react-router-dom";
+import { usePoolState, type TournamentPhase } from "../state/usePoolState";
+import { Link } from "react-router-dom";
 import StatusBanner from "../components/StatusBanner";
 import PageIntro from "../components/PageIntro";
 import Button from "../components/Button";
 import EmptyState from "../components/EmptyState";
 import type { GroupStageMatch } from "../data/worldcup";
-import { calculateGroupStandings } from "../data/standings";
-import { getBestThirdPlacedTeams } from "../data/qualification";
-import { generateRoundOf32 } from "../data/knockout";
 import { useFriendPredictions } from "../state/FriendPredictionsContext";
+import {
+  computePhasePoints,
+  getPhaseScoringContexts,
+  scorableComparisonPhases,
+} from "../utils/phaseScoring";
 
 type Entry = {
   id: string;
   name: string;
   points: number | null;
-  pointsByPhase: {
-    groups: number;
-    roundOf32: number;
-  };
+  pointsByPhase: Partial<Record<TournamentPhase, number>>;
 };
-
-function computePhasePoints(
-  phaseMatches: Array<{ id: number }>,
-  predictionsByMatch: Record<number, Prediction> | undefined,
-  resultsByMatch: Record<number, { home: number; away: number }>,
-) {
-  if (!predictionsByMatch) return 0;
-
-  return phaseMatches.reduce((total, match) => {
-    const pred = predictionsByMatch[match.id];
-    const res = resultsByMatch[match.id];
-    if (!pred || !res) return total;
-    return total + scorePrediction(pred, res);
-  }, 0);
-}
 
 function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
   const pool = usePoolState(matches);
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
+  const [entriesLoading, setEntriesLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const navigate = useNavigate();
   const { generatedFriendPredictions } = useFriendPredictions();
 
-  const generatedGroupFriendPredictions = useMemo(
-    () => generatedFriendPredictions.groups ?? {},
-    [generatedFriendPredictions],
+  const usingGeneratedPredictions = scorableComparisonPhases.some(
+    (phase) => Object.keys(generatedFriendPredictions[phase] ?? {}).length > 0,
   );
-
-  const generatedRoundOf32FriendPredictions = useMemo(
-    () => generatedFriendPredictions.roundOf32 ?? {},
-    [generatedFriendPredictions],
-  );
-
-  const usingGeneratedPredictions =
-    Object.keys(generatedGroupFriendPredictions).length > 0 ||
-    Object.keys(generatedRoundOf32FriendPredictions).length > 0;
 
   useEffect(() => {
     let alive = true;
@@ -85,33 +55,22 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
     };
   }, []);
 
-  const groupsResultsReady =
-    matches.length > 0 &&
-    matches.every((match) => pool.results[match.id] !== undefined);
+  const phaseContexts = useMemo(
+    () => getPhaseScoringContexts(matches, pool.results),
+    [matches, pool.results],
+  );
 
-  const standingsByGroup = groupsResultsReady
-    ? Object.fromEntries(
-        pool.groups.map((group) => [
-          group,
-          calculateGroupStandings(matches, pool.results, group),
-        ]),
-      )
-    : {};
+  const resolvedPhaseContexts = useMemo(
+    () =>
+      phaseContexts.filter(
+        (context) =>
+          scorableComparisonPhases.includes(context.phase) &&
+          context.isResolved,
+      ),
+    [phaseContexts],
+  );
 
-  const bestThirds = groupsResultsReady
-    ? getBestThirdPlacedTeams(standingsByGroup)
-    : [];
-
-  const roundOf32Matches =
-    groupsResultsReady && bestThirds.length >= 8
-      ? generateRoundOf32(standingsByGroup, bestThirds)
-      : [];
-
-  const roundOf32ResultsReady =
-    roundOf32Matches.length > 0 &&
-    roundOf32Matches.every((match) => pool.results[match.id] !== undefined);
-
-  const resultsReady = groupsResultsReady || roundOf32ResultsReady;
+  const resultsReady = resolvedPhaseContexts.length > 0;
 
   const myEntry: Entry = useMemo(() => {
     if (!resultsReady) {
@@ -126,36 +85,29 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
       };
     }
 
-    const groupPoints = groupsResultsReady
-      ? computePhasePoints(matches, pool.predictions.groups, pool.results)
-      : 0;
-
-    const roundOf32Points = roundOf32ResultsReady
-      ? computePhasePoints(
-          roundOf32Matches,
-          pool.predictions.roundOf32,
+    const pointsByPhase = Object.fromEntries(
+      resolvedPhaseContexts.map((context) => [
+        context.phase,
+        computePhasePoints(
+          context.matches,
+          pool.predictions[context.phase],
           pool.results,
-        )
-      : 0;
+        ),
+      ]),
+    ) as Partial<Record<TournamentPhase, number>>;
+
+    const totalPoints = Object.values(pointsByPhase).reduce(
+      (total, points) => total + (points ?? 0),
+      0,
+    );
 
     return {
       id: "me",
       name: "You",
-      points: groupPoints + roundOf32Points,
-      pointsByPhase: {
-        groups: groupPoints,
-        roundOf32: roundOf32Points,
-      },
+      points: totalPoints,
+      pointsByPhase,
     };
-  }, [
-    resultsReady,
-    groupsResultsReady,
-    roundOf32ResultsReady,
-    matches,
-    roundOf32Matches,
-    pool.predictions,
-    pool.results,
-  ]);
+  }, [resultsReady, resolvedPhaseContexts, pool.predictions, pool.results]);
 
   const [friendEntries, setFriendEntries] = useState<Entry[]>([]);
 
@@ -165,43 +117,59 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
     async function run() {
       if (!resultsReady) {
         setFriendEntries([]);
+        setEntriesLoading(false);
         return;
       }
 
       try {
-        const entries: Entry[] = [];
+        setEntriesLoading(true);
 
-        for (const f of friends) {
-          const groupPredictions =
-            generatedGroupFriendPredictions[f.id] ??
-            (await getFriendPredictions(f.id, "groups"));
+        const entries = await Promise.all(
+          friends.map(async (f) => {
+            const predictionsByPhase = await Promise.all(
+              resolvedPhaseContexts.map(async (context) => {
+                const generated =
+                  generatedFriendPredictions[context.phase]?.[f.id];
+                const predictions =
+                  generated ??
+                  (await getFriendPredictions(f.id, context.phase));
 
-          const roundOf32Predictions =
-            generatedRoundOf32FriendPredictions[f.id] ??
-            (await getFriendPredictions(f.id, "roundOf32"));
+                return [context.phase, predictions] as const;
+              }),
+            );
 
-          const groupPoints = groupsResultsReady
-            ? computePhasePoints(matches, groupPredictions, pool.results)
-            : 0;
+            const pointsByPhase = Object.fromEntries(
+              predictionsByPhase.map(([phase, predictions]) => {
+                const context = resolvedPhaseContexts.find(
+                  (item) => item.phase === phase,
+                );
 
-          const roundOf32Points = roundOf32ResultsReady
-            ? computePhasePoints(
-                roundOf32Matches,
-                roundOf32Predictions,
-                pool.results,
-              )
-            : 0;
+                return [
+                  phase,
+                  context
+                    ? computePhasePoints(
+                        context.matches,
+                        predictions,
+                        pool.results,
+                      )
+                    : 0,
+                ];
+              }),
+            ) as Partial<Record<TournamentPhase, number>>;
 
-          entries.push({
-            id: f.id,
-            name: f.name,
-            points: groupPoints + roundOf32Points,
-            pointsByPhase: {
-              groups: groupPoints,
-              roundOf32: roundOf32Points,
-            },
-          });
-        }
+            const totalPoints = Object.values(pointsByPhase).reduce(
+              (total, points) => total + (points ?? 0),
+              0,
+            );
+
+            return {
+              id: f.id,
+              name: f.name,
+              points: totalPoints,
+              pointsByPhase,
+            };
+          }),
+        );
 
         if (!alive) return;
         setFriendEntries(entries);
@@ -210,6 +178,10 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
         setError(
           e instanceof Error ? e.message : "Failed to compute leaderboard",
         );
+      } finally {
+        if (alive) {
+          setEntriesLoading(false);
+        }
       }
     }
 
@@ -220,13 +192,9 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
   }, [
     friends,
     resultsReady,
-    groupsResultsReady,
-    roundOf32ResultsReady,
-    matches,
-    roundOf32Matches,
+    resolvedPhaseContexts,
     pool.results,
-    generatedGroupFriendPredictions,
-    generatedRoundOf32FriendPredictions,
+    generatedFriendPredictions,
   ]);
 
   const leaderboard = useMemo(() => {
@@ -238,6 +206,8 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
       return bp - ap;
     });
   }, [myEntry, friendEntries]);
+
+  const isLeaderboardLoading = loading || entriesLoading;
 
   function getRankLabel(index: number) {
     if (index === 0) return "🥇";
@@ -273,24 +243,11 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
           }}
         >
           Leaderboard is currently using generated friend prediction data for
-          this phase.
+          available phases.
         </div>
       )}
 
-      {loading ? (
-        <div
-          className="widget"
-          style={{
-            color: "var(--text-secondary)",
-            marginBottom: "1rem",
-            fontWeight: 500,
-            padding: "1rem 1.1rem",
-            borderRadius: "18px",
-          }}
-        >
-          Loading leaderboard…
-        </div>
-      ) : error ? (
+      {error ? (
         <>
           <StatusBanner
             title="Could not load leaderboard data."
@@ -302,10 +259,87 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
         </>
       ) : null}
 
-      {leaderboard.length === 0 ? (
+      {isLeaderboardLoading ? (
+        <div
+          style={{
+            maxWidth: "760px",
+            margin: "0 auto",
+            width: "100%",
+          }}
+          aria-label="Loading leaderboard"
+        >
+          {Array.from({ length: 5 }, (_, index) => (
+            <div
+              key={index}
+              style={{
+                border: "1px solid var(--border-subtle)",
+                borderRadius: "20px",
+                padding: "1rem 1.1rem",
+                marginBottom: "0.85rem",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "1rem",
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
+                boxShadow: "var(--shadow-soft)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.9rem",
+                  minWidth: 0,
+                  flex: 1,
+                }}
+              >
+                <div
+                  style={{
+                    width: "2.25rem",
+                    height: "2.25rem",
+                    borderRadius: "999px",
+                    background: "rgba(255,255,255,0.08)",
+                    border: "1px solid var(--border-subtle)",
+                    flexShrink: 0,
+                  }}
+                />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div
+                    style={{
+                      width: "42%",
+                      height: "0.85rem",
+                      borderRadius: "999px",
+                      background: "rgba(255,255,255,0.1)",
+                    }}
+                  />
+                  <div
+                    style={{
+                      width: "64%",
+                      height: "0.7rem",
+                      borderRadius: "999px",
+                      background: "rgba(255,255,255,0.07)",
+                      marginTop: "0.55rem",
+                    }}
+                  />
+                </div>
+              </div>
+              <div
+                style={{
+                  width: "3rem",
+                  height: "1.4rem",
+                  borderRadius: "999px",
+                  background: "rgba(255,255,255,0.09)",
+                  flexShrink: 0,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      ) : leaderboard.length === 0 ? (
         <EmptyState
           title="No leaderboard entries yet"
-          message="Generate friend predictions or run a simulation to populate ranking data for this phase."
+          message="Generate friend predictions or run a simulation to populate ranking data."
         />
       ) : (
         <div
@@ -318,48 +352,16 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
           {leaderboard.map((e, index) => {
             const isMe = e.id === "me";
             const clickable = !isMe;
-
-            return (
-              <div
-                key={e.id}
-                role={clickable ? "button" : undefined}
-                tabIndex={clickable ? 0 : undefined}
-                onClick={() => {
-                  if (!clickable) return;
-                  navigate(`/friends/${e.id}`);
-                }}
-                onKeyDown={(ev) => {
-                  if (!clickable) return;
-                  if (ev.key === "Enter" || ev.key === " ") {
-                    ev.preventDefault();
-                    navigate(`/friends/${e.id}`);
-                  }
-                }}
-                style={{
-                  border: "1px solid var(--border-subtle)",
-                  borderRadius: "20px",
-                  padding: "1rem 1.1rem",
-                  marginBottom: "0.85rem",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  cursor: clickable ? "pointer" : "default",
-                  background: isMe
-                    ? "rgba(58, 112, 226, 0.12)"
-                    : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-                  boxShadow: "var(--shadow-soft)",
-                  backdropFilter: "blur(12px)",
-                  WebkitBackdropFilter: "blur(12px)",
-                  transition:
-                    "transform 140ms ease, border-color 140ms ease, background 140ms ease",
-                }}
-              >
+            const rowContent = (
+              <>
                 <div
                   style={{
                     display: "flex",
-                    alignItems: "center",
+                    alignItems: "flex-start",
                     gap: "0.9rem",
                     minWidth: 0,
+                    flex: 1,
+                    textAlign: "left",
                   }}
                 >
                   <div
@@ -379,7 +381,7 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
                     {getRankLabel(index)}
                   </div>
 
-                  <div style={{ minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div
                       style={{
                         color: "var(--text-primary)",
@@ -401,7 +403,9 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
                     >
                       {e.points === null
                         ? "Waiting for simulation"
-                        : `Groups: ${e.pointsByPhase.groups} • R32: ${e.pointsByPhase.roundOf32}`}
+                        : `Groups: ${e.pointsByPhase.groups ?? 0} • R32: ${
+                            e.pointsByPhase.roundOf32 ?? 0
+                          }`}
                     </div>
                   </div>
                 </div>
@@ -433,6 +437,50 @@ function LeaderboardPage({ matches }: { matches: GroupStageMatch[] }) {
                     pts
                   </div>
                 </div>
+              </>
+            );
+
+            const rowStyle: CSSProperties = {
+              border: "1px solid var(--border-subtle)",
+              borderRadius: "20px",
+              padding: "1rem 1.1rem",
+              marginBottom: "0.85rem",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "1rem",
+              cursor: clickable ? "pointer" : "default",
+              background: isMe
+                ? "rgba(58, 112, 226, 0.12)"
+                : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+              boxShadow: "var(--shadow-soft)",
+              backdropFilter: "blur(12px)",
+              WebkitBackdropFilter: "blur(12px)",
+              transition:
+                "transform 140ms ease, border-color 140ms ease, background 140ms ease",
+            };
+
+            return clickable ? (
+              <Link
+                key={e.id}
+                to={`/friends/${encodeURIComponent(e.id)}`}
+                style={{
+                  ...rowStyle,
+                  color: "inherit",
+                  font: "inherit",
+                  width: "100%",
+                  textAlign: "inherit",
+                  textDecoration: "none",
+                }}
+              >
+                {rowContent}
+              </Link>
+            ) : (
+              <div
+                key={e.id}
+                style={rowStyle}
+              >
+                {rowContent}
               </div>
             );
           })}
