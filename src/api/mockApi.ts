@@ -49,19 +49,18 @@ const EXTRA_FRIEND_NAMES = [
 
 const PHASE_MATCH_IDS: Record<TournamentPhase, number[]> = {
   groups: Array.from({ length: 72 }, (_, index) => index + 1),
-  roundOf32: Array.from({ length: 16 }, (_, index) => 1001 + index),
-  roundOf16: Array.from({ length: 8 }, (_, index) => 2001 + index),
-  roundOf8: Array.from({ length: 4 }, (_, index) => 3001 + index),
-  quarterfinals: Array.from({ length: 4 }, (_, index) => 4001 + index),
-  semifinals: Array.from({ length: 2 }, (_, index) => 5001 + index),
-  final: [6001],
+  roundOf32: Array.from({ length: 16 }, (_, index) => 73 + index),
+  roundOf16: Array.from({ length: 8 }, (_, index) => 89 + index),
+  roundOf8: [],
+  quarterfinals: Array.from({ length: 4 }, (_, index) => 97 + index),
+  semifinals: [101, 102],
+  final: [104],
 };
 
 const ALL_PHASES: TournamentPhase[] = [
   "groups",
   "roundOf32",
   "roundOf16",
-  "roundOf8",
   "quarterfinals",
   "semifinals",
   "final",

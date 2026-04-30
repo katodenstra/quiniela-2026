@@ -20,7 +20,10 @@ import type { GroupStageMatch } from "../data/worldcup";
 import { useFriendPredictions } from "../state/FriendPredictionsContext";
 import {
   computePhasePoints,
+  computeCumulativeTournamentPoints,
+  computePointsByPhase,
   getPhaseScoringContexts,
+  getResolvedScoringContexts,
   getTeamName,
   isPredictionSubmitted,
   scorableComparisonPhases,
@@ -166,12 +169,7 @@ function FriendPage({
   const error = friendsApi.error || predictionsError;
 
   const resolvedPhaseContexts = useMemo(
-    () =>
-      phaseContexts.filter(
-        (context) =>
-          scorableComparisonPhases.includes(context.phase) &&
-          context.isResolved,
-      ),
+    () => getResolvedScoringContexts(phaseContexts),
     [phaseContexts],
   );
 
@@ -241,11 +239,18 @@ function FriendPage({
   const friendTotal = useMemo(() => {
     if (!resultsReady) return null;
 
-    return phaseSections.reduce(
-      (total, section) => total + (section.friendPoints ?? 0),
-      0,
+    const pointsByPhase = computePointsByPhase(
+      resolvedPhaseContexts,
+      friendPredictionsByPhase,
+      pool.results,
     );
-  }, [phaseSections, resultsReady]);
+    return computeCumulativeTournamentPoints(pointsByPhase);
+  }, [
+    friendPredictionsByPhase,
+    pool.results,
+    resolvedPhaseContexts,
+    resultsReady,
+  ]);
 
   const leaderboard = useMemo(() => {
     return sortLeaderboardEntries(

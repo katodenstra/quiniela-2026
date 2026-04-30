@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { getFriends, getFriendPredictions, type Friend } from "../api/mockApi";
-import type { PoolState, TournamentPhase } from "../state/usePoolState";
+import type {
+  PoolState,
+  PredictionsByMatchId,
+  TournamentPhase,
+} from "../state/usePoolState";
 import { Link } from "react-router-dom";
 import StatusBanner from "../components/StatusBanner";
 import PageIntro from "../components/PageIntro";
@@ -9,14 +13,27 @@ import EmptyState from "../components/EmptyState";
 import type { GroupStageMatch } from "../data/worldcup";
 import { useFriendPredictions } from "../state/FriendPredictionsContext";
 import {
-  computePhasePoints,
+  computeCumulativeTournamentPoints,
+  computePointsByPhase,
+  getPhaseTitle,
   getPhaseScoringContexts,
+  getResolvedScoringContexts,
   scorableComparisonPhases,
 } from "../utils/phaseScoring";
 import {
   sortLeaderboardEntries,
   type LeaderboardEntry,
 } from "../utils/leaderboardRanking";
+
+function getPhaseAbbreviation(phase: TournamentPhase) {
+  if (phase === "groups") return "Groups";
+  if (phase === "roundOf32") return "R32";
+  if (phase === "roundOf16") return "R16";
+  if (phase === "quarterfinals") return "QF";
+  if (phase === "semifinals") return "SF";
+  if (phase === "final") return "Final";
+  return getPhaseTitle(phase);
+}
 
 function LeaderboardPage({
   matches,
@@ -63,12 +80,7 @@ function LeaderboardPage({
   );
 
   const resolvedPhaseContexts = useMemo(
-    () =>
-      phaseContexts.filter(
-        (context) =>
-          scorableComparisonPhases.includes(context.phase) &&
-          context.isResolved,
-      ),
+    () => getResolvedScoringContexts(phaseContexts),
     [phaseContexts],
   );
 
@@ -80,33 +92,20 @@ function LeaderboardPage({
         id: "me",
         name: "You",
         points: null,
-        pointsByPhase: {
-          groups: 0,
-          roundOf32: 0,
-        },
+        pointsByPhase: {},
       };
     }
 
-    const pointsByPhase = Object.fromEntries(
-      resolvedPhaseContexts.map((context) => [
-        context.phase,
-        computePhasePoints(
-          context.matches,
-          pool.predictions[context.phase],
-          pool.results,
-        ),
-      ]),
-    ) as Partial<Record<TournamentPhase, number>>;
-
-    const totalPoints = Object.values(pointsByPhase).reduce(
-      (total, points) => total + (points ?? 0),
-      0,
+    const pointsByPhase = computePointsByPhase(
+      resolvedPhaseContexts,
+      pool.predictions,
+      pool.results,
     );
 
     return {
       id: "me",
       name: "You",
-      points: totalPoints,
+      points: computeCumulativeTournamentPoints(pointsByPhase),
       pointsByPhase,
     };
   }, [resultsReady, resolvedPhaseContexts, pool.predictions, pool.results]);
@@ -140,34 +139,19 @@ function LeaderboardPage({
               }),
             );
 
-            const pointsByPhase = Object.fromEntries(
-              predictionsByPhase.map(([phase, predictions]) => {
-                const context = resolvedPhaseContexts.find(
-                  (item) => item.phase === phase,
-                );
-
-                return [
-                  phase,
-                  context
-                    ? computePhasePoints(
-                        context.matches,
-                        predictions,
-                        pool.results,
-                      )
-                    : 0,
-                ];
-              }),
-            ) as Partial<Record<TournamentPhase, number>>;
-
-            const totalPoints = Object.values(pointsByPhase).reduce(
-              (total, points) => total + (points ?? 0),
-              0,
+            const predictionsByResolvedPhase = Object.fromEntries(
+              predictionsByPhase,
+            ) as Partial<Record<TournamentPhase, PredictionsByMatchId>>;
+            const pointsByPhase = computePointsByPhase(
+              resolvedPhaseContexts,
+              predictionsByResolvedPhase,
+              pool.results,
             );
 
             return {
               id: f.id,
               name: f.name,
-              points: totalPoints,
+              points: computeCumulativeTournamentPoints(pointsByPhase),
               pointsByPhase,
             };
           }),
@@ -202,6 +186,11 @@ function LeaderboardPage({
   const leaderboard = useMemo(() => {
     return sortLeaderboardEntries([myEntry, ...friendEntries]);
   }, [myEntry, friendEntries]);
+
+  const resolvedPhaseSummary = useMemo(
+    () => resolvedPhaseContexts.map((context) => context.phase),
+    [resolvedPhaseContexts],
+  );
 
   const isLeaderboardLoading = loading || entriesLoading;
 
@@ -399,9 +388,14 @@ function LeaderboardPage({
                     >
                       {e.points === null
                         ? "Waiting for simulation"
-                        : `Groups: ${e.pointsByPhase.groups ?? 0} • R32: ${
-                            e.pointsByPhase.roundOf32 ?? 0
-                          }`}
+                        : resolvedPhaseSummary
+                            .map(
+                              (phase) =>
+                                `${getPhaseAbbreviation(phase)}: ${
+                                  e.pointsByPhase[phase] ?? 0
+                                }`,
+                            )
+                            .join(" • ")}
                     </div>
                   </div>
                 </div>

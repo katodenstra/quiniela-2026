@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   AppGroupId as GroupId,
   GroupStageMatch,
   ViewMode,
 } from "../data/worldcup";
 import type { KnockoutMatch } from "../data/knockout";
-import { generateRoundOf32 } from "../data/knockout";
+import {
+  generateKnockoutMatchesByPhase,
+  isKnockoutPhaseResolved,
+} from "../data/knockout";
 import { getBestThirdPlacedTeams } from "../data/qualification";
 import { calculateGroupStandings } from "../data/standings";
 
@@ -64,6 +67,35 @@ export function randomScore() {
 }
 
 type PhaseMatch = GroupStageMatch | KnockoutMatch;
+
+const phaseOrder: TournamentPhase[] = [
+  "groups",
+  "roundOf32",
+  "roundOf16",
+  "quarterfinals",
+  "semifinals",
+  "final",
+];
+
+function normalizePhase(phase: TournamentPhase): TournamentPhase {
+  return phase === "roundOf8" ? "quarterfinals" : phase;
+}
+
+function getNextPhase(phase: TournamentPhase): TournamentPhase | null {
+  const index = phaseOrder.indexOf(normalizePhase(phase));
+  return index === -1 ? null : (phaseOrder[index + 1] ?? null);
+}
+
+function randomKnockoutScore(): Result {
+  const home = randomScore();
+  let away = randomScore();
+
+  if (home === away) {
+    away = home === 4 ? home - 1 : home + 1;
+  }
+
+  return { home, away };
+}
 
 export function usePoolState(matches: GroupStageMatch[]) {
   const emptyPredictionsByPhase: PredictionsByPhase = {
@@ -166,10 +198,14 @@ export function usePoolState(matches: GroupStageMatch[]) {
       raw === "semifinals" ||
       raw === "final"
     ) {
-      return raw;
+      return normalizePhase(raw);
     }
     return "groups";
   });
+
+  const setActivePhase = useCallback((nextPhase: TournamentPhase) => {
+    setPhase(normalizePhase(nextPhase));
+  }, []);
 
   const matchdays = useMemo(
     () =>
@@ -227,19 +263,79 @@ export function usePoolState(matches: GroupStageMatch[]) {
     [groupsResolved, standingsByGroup],
   );
 
-  const roundOf32Matches = useMemo(
+  const knockoutMatchesByPhase = useMemo(
     () =>
       groupsResolved && bestThirds.length >= 8
-        ? generateRoundOf32(standingsByGroup, bestThirds)
-        : [],
-    [groupsResolved, standingsByGroup, bestThirds],
+        ? generateKnockoutMatchesByPhase(standingsByGroup, bestThirds, results)
+        : {},
+    [groupsResolved, standingsByGroup, bestThirds, results],
   );
 
-  const getMatchesForPhase = (targetPhase: TournamentPhase): PhaseMatch[] => {
-    if (targetPhase === "groups") return groupPhaseMatches;
-    if (targetPhase === "roundOf32") return roundOf32Matches;
-    return [];
-  };
+  const roundOf32Resolved = useMemo(
+    () => isKnockoutPhaseResolved(knockoutMatchesByPhase.roundOf32, results),
+    [knockoutMatchesByPhase.roundOf32, results],
+  );
+
+  const roundOf16Resolved = useMemo(
+    () => isKnockoutPhaseResolved(knockoutMatchesByPhase.roundOf16, results),
+    [knockoutMatchesByPhase.roundOf16, results],
+  );
+
+  const quarterfinalsResolved = useMemo(
+    () =>
+      isKnockoutPhaseResolved(knockoutMatchesByPhase.quarterfinals, results),
+    [knockoutMatchesByPhase.quarterfinals, results],
+  );
+
+  const semifinalsResolved = useMemo(
+    () => isKnockoutPhaseResolved(knockoutMatchesByPhase.semifinals, results),
+    [knockoutMatchesByPhase.semifinals, results],
+  );
+
+  const getMatchesForPhase = useCallback(
+    (targetPhase: TournamentPhase): PhaseMatch[] => {
+      const normalizedPhase = normalizePhase(targetPhase);
+
+      if (normalizedPhase === "groups") return groupPhaseMatches;
+      if (normalizedPhase === "roundOf32") {
+        return groupsResolved ? (knockoutMatchesByPhase.roundOf32 ?? []) : [];
+      }
+      if (normalizedPhase === "roundOf16") {
+        return roundOf32Resolved
+          ? (knockoutMatchesByPhase.roundOf16 ?? [])
+          : [];
+      }
+      if (normalizedPhase === "quarterfinals") {
+        return roundOf16Resolved
+          ? (knockoutMatchesByPhase.quarterfinals ?? [])
+          : [];
+      }
+      if (normalizedPhase === "semifinals") {
+        return quarterfinalsResolved
+          ? (knockoutMatchesByPhase.semifinals ?? [])
+          : [];
+      }
+      if (normalizedPhase === "final") {
+        return semifinalsResolved ? (knockoutMatchesByPhase.final ?? []) : [];
+      }
+
+      return [];
+    },
+    [
+      groupPhaseMatches,
+      groupsResolved,
+      knockoutMatchesByPhase,
+      quarterfinalsResolved,
+      roundOf16Resolved,
+      roundOf32Resolved,
+      semifinalsResolved,
+    ],
+  );
+
+  const phaseMatches = useMemo(
+    () => getMatchesForPhase(phase),
+    [getMatchesForPhase, phase],
+  );
 
   useEffect(() => {
     try {
@@ -330,7 +426,7 @@ export function usePoolState(matches: GroupStageMatch[]) {
   const resetDraft = () => {
     setPredictions(emptyPredictionsByPhase);
     setResults({});
-    setPhase("groups");
+    setActivePhase("groups");
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(RESULTS_KEY);
     setPredictionStateByPhase(emptyPredictionStateByPhase);
@@ -373,21 +469,25 @@ export function usePoolState(matches: GroupStageMatch[]) {
     };
 
     for (const match of matchesToSimulate) {
-      nextResults[match.id] = { home: randomScore(), away: randomScore() };
+      nextResults[match.id] =
+        phase === "groups"
+          ? { home: randomScore(), away: randomScore() }
+          : randomKnockoutScore();
     }
 
     setResults(nextResults);
     setPredictionState("locked");
 
-    if (phase === "groups") {
-      setPhase("roundOf32");
+    const nextPhase = getNextPhase(phase);
+    if (nextPhase) {
+      setActivePhase(nextPhase);
     }
   };
 
   const resetSimulation = () => {
     setResults({});
     setPredictionStateByPhase(emptyPredictionStateByPhase);
-    setPhase("groups");
+    setActivePhase("groups");
     localStorage.removeItem(RESULTS_KEY);
     localStorage.setItem(
       STATE_KEY,
@@ -409,22 +509,18 @@ export function usePoolState(matches: GroupStageMatch[]) {
   }, [matchdays, selectedMatchday]);
 
   const visibleMatches =
-    viewMode === "matchday"
-      ? matches.filter((m) => m.matchday === activeMatchday)
-      : matches.filter((m) => m.group === activeGroup);
+    phase === "groups"
+      ? viewMode === "matchday"
+        ? matches.filter((m) => m.matchday === activeMatchday)
+        : matches.filter((m) => m.group === activeGroup)
+      : phaseMatches;
 
   const predictedInGroup = useMemo(() => {
     return visibleMatches.reduce((count, m) => {
-      const pred = predictions[phase]?.[m.id];
+      const pred = predictions.groups?.[m.id];
       return count + (isPredictionComplete(pred) ? 1 : 0);
     }, 0);
-  }, [visibleMatches, predictions, phase]);
-
-  const phaseMatches = useMemo(() => {
-    if (phase === "groups") return groupPhaseMatches;
-    if (phase === "roundOf32") return roundOf32Matches;
-    return [];
-  }, [phase, groupPhaseMatches, roundOf32Matches]);
+  }, [visibleMatches, predictions.groups]);
 
   const totalPredicted = useMemo(() => {
     return phaseMatches.reduce((count, m) => {
@@ -466,7 +562,7 @@ export function usePoolState(matches: GroupStageMatch[]) {
       (acc, group) => {
         const groupMatches = matches.filter((m) => m.group === group);
         const completed = groupMatches.reduce((count, match) => {
-          const pred = predictions[phase]?.[match.id];
+          const pred = predictions.groups?.[match.id];
           return count + (isPredictionComplete(pred) ? 1 : 0);
         }, 0);
 
@@ -482,14 +578,14 @@ export function usePoolState(matches: GroupStageMatch[]) {
       },
       {} as Record<GroupId, CompletionStatus>,
     );
-  }, [groups, matches, predictions, phase]);
+  }, [groups, matches, predictions.groups]);
 
   const matchdayCompletion = useMemo(() => {
     return matchdays.reduce<Record<number, CompletionStatus>>(
       (acc, day) => {
         const dayMatches = matches.filter((m) => m.matchday === day);
         const completed = dayMatches.reduce((count, match) => {
-          const pred = predictions[phase]?.[match.id];
+          const pred = predictions.groups?.[match.id];
           return count + (isPredictionComplete(pred) ? 1 : 0);
         }, 0);
 
@@ -505,18 +601,24 @@ export function usePoolState(matches: GroupStageMatch[]) {
       },
       {} as Record<number, CompletionStatus>,
     );
-  }, [matchdays, matches, predictions, phase]);
+  }, [matchdays, matches, predictions.groups]);
 
   const myPoints = useMemo(() => {
-    const groupPredictions = predictions.groups ?? {};
+    return phaseOrder.reduce((total, targetPhase) => {
+      const matchesForPhase = getMatchesForPhase(targetPhase);
+      const phasePredictions = predictions[targetPhase] ?? {};
 
-    return matches.reduce((total, match) => {
-      const pred = groupPredictions[match.id];
-      const res = results[match.id];
-      if (!pred || !res) return total;
-      return total + scorePrediction(pred, res);
+      return (
+        total +
+        matchesForPhase.reduce((phaseTotal, match) => {
+          const pred = phasePredictions[match.id];
+          const res = results[match.id];
+          if (!pred || !res) return phaseTotal;
+          return phaseTotal + scorePrediction(pred, res);
+        }, 0)
+      );
     }, 0);
-  }, [matches, predictions, results]);
+  }, [getMatchesForPhase, predictions, results]);
 
   return {
     predictions,
@@ -544,7 +646,8 @@ export function usePoolState(matches: GroupStageMatch[]) {
     selectedMatchday: activeMatchday,
     setSelectedMatchday,
     phase,
-    setPhase,
+    setPhase: setActivePhase,
+    getMatchesForPhase,
     fillMyPredictionsForCurrentPhase,
     missingPredictionsCount,
     isDraft,

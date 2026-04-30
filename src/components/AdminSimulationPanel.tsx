@@ -19,7 +19,6 @@ const phaseOptions: { value: TournamentPhase; label: string }[] = [
   { value: "groups", label: "Groups" },
   { value: "roundOf32", label: "Round of 32" },
   { value: "roundOf16", label: "Round of 16" },
-  { value: "roundOf8", label: "Round of 8" },
   { value: "quarterfinals", label: "Quarterfinals" },
   { value: "semifinals", label: "Semifinals" },
   { value: "final", label: "Final" },

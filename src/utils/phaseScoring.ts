@@ -1,5 +1,8 @@
 import type { KnockoutMatch } from "../data/knockout";
-import { generateRoundOf32 } from "../data/knockout";
+import {
+  generateKnockoutMatchesByPhase,
+  isKnockoutPhaseResolved,
+} from "../data/knockout";
 import { getBestThirdPlacedTeams } from "../data/qualification";
 import { calculateGroupStandings } from "../data/standings";
 import type { GroupStageMatch } from "../data/worldcup";
@@ -7,12 +10,14 @@ import {
   scorePrediction,
   type Prediction,
   type PredictionsByMatchId,
+  type PredictionsByPhase,
   type ResultsByMatchId,
   type TournamentPhase,
 } from "../state/usePoolState";
 
 export type ComparisonMatch = GroupStageMatch | KnockoutMatch;
 export type SubmittedPrediction = { home: number; away: number };
+export type PointsByPhase = Partial<Record<TournamentPhase, number>>;
 
 export type PhaseConfig = {
   phase: TournamentPhase;
@@ -29,7 +34,6 @@ export const comparisonPhases: PhaseConfig[] = [
   { phase: "groups", title: "Groups" },
   { phase: "roundOf32", title: "Round of 32" },
   { phase: "roundOf16", title: "Round of 16" },
-  { phase: "roundOf8", title: "Round of 8" },
   { phase: "quarterfinals", title: "Quarterfinals" },
   { phase: "semifinals", title: "Semifinals" },
   { phase: "final", title: "Final" },
@@ -38,6 +42,10 @@ export const comparisonPhases: PhaseConfig[] = [
 export const scorableComparisonPhases: TournamentPhase[] = [
   "groups",
   "roundOf32",
+  "roundOf16",
+  "quarterfinals",
+  "semifinals",
+  "final",
 ];
 
 export function getPhaseTitle(phase: TournamentPhase) {
@@ -85,14 +93,25 @@ export function getPhaseScoringContexts(
     ? getBestThirdPlacedTeams(standingsByGroup)
     : [];
 
-  const roundOf32Matches =
+  const knockoutMatchesByPhase =
     groupsResolved && bestThirds.length >= 8
-      ? generateRoundOf32(standingsByGroup, bestThirds)
-      : [];
+      ? generateKnockoutMatchesByPhase(standingsByGroup, bestThirds, results)
+      : {};
 
   const roundOf32Resolved =
-    roundOf32Matches.length > 0 &&
-    roundOf32Matches.every((match) => results[match.id] !== undefined);
+    isKnockoutPhaseResolved(knockoutMatchesByPhase.roundOf32, results);
+  const roundOf16Resolved =
+    isKnockoutPhaseResolved(knockoutMatchesByPhase.roundOf16, results);
+  const quarterfinalsResolved = isKnockoutPhaseResolved(
+    knockoutMatchesByPhase.quarterfinals,
+    results,
+  );
+  const semifinalsResolved =
+    isKnockoutPhaseResolved(knockoutMatchesByPhase.semifinals, results);
+  const finalResolved = isKnockoutPhaseResolved(
+    knockoutMatchesByPhase.final,
+    results,
+  );
 
   return comparisonPhases.map((phaseConfig) => {
     if (phaseConfig.phase === "groups") {
@@ -107,9 +126,49 @@ export function getPhaseScoringContexts(
     if (phaseConfig.phase === "roundOf32") {
       return {
         ...phaseConfig,
-        matches: roundOf32Matches,
-        isAvailable: roundOf32Matches.length > 0,
+        matches: knockoutMatchesByPhase.roundOf32 ?? [],
+        isAvailable: groupsResolved,
         isResolved: roundOf32Resolved,
+      };
+    }
+
+    if (phaseConfig.phase === "roundOf16") {
+      return {
+        ...phaseConfig,
+        matches: roundOf32Resolved ? (knockoutMatchesByPhase.roundOf16 ?? []) : [],
+        isAvailable: roundOf32Resolved,
+        isResolved: roundOf16Resolved,
+      };
+    }
+
+    if (phaseConfig.phase === "quarterfinals") {
+      return {
+        ...phaseConfig,
+        matches: roundOf16Resolved
+          ? (knockoutMatchesByPhase.quarterfinals ?? [])
+          : [],
+        isAvailable: roundOf16Resolved,
+        isResolved: quarterfinalsResolved,
+      };
+    }
+
+    if (phaseConfig.phase === "semifinals") {
+      return {
+        ...phaseConfig,
+        matches: quarterfinalsResolved
+          ? (knockoutMatchesByPhase.semifinals ?? [])
+          : [],
+        isAvailable: quarterfinalsResolved,
+        isResolved: semifinalsResolved,
+      };
+    }
+
+    if (phaseConfig.phase === "final") {
+      return {
+        ...phaseConfig,
+        matches: semifinalsResolved ? (knockoutMatchesByPhase.final ?? []) : [],
+        isAvailable: semifinalsResolved,
+        isResolved: finalResolved,
       };
     }
 
@@ -135,4 +194,37 @@ export function computePhasePoints(
     if (!isPredictionSubmitted(pred) || !res) return total;
     return total + scorePrediction(pred, res);
   }, 0);
+}
+
+export function getResolvedScoringContexts(
+  phaseContexts: PhaseScoringContext[],
+) {
+  return phaseContexts.filter(
+    (context) =>
+      scorableComparisonPhases.includes(context.phase) && context.isResolved,
+  );
+}
+
+export function computePointsByPhase(
+  resolvedPhaseContexts: PhaseScoringContext[],
+  predictionsByPhase: Partial<PredictionsByPhase>,
+  resultsByMatch: ResultsByMatchId,
+): PointsByPhase {
+  return Object.fromEntries(
+    resolvedPhaseContexts.map((context) => [
+      context.phase,
+      computePhasePoints(
+        context.matches,
+        predictionsByPhase[context.phase],
+        resultsByMatch,
+      ),
+    ]),
+  ) as PointsByPhase;
+}
+
+export function computeCumulativeTournamentPoints(pointsByPhase: PointsByPhase) {
+  return scorableComparisonPhases.reduce(
+    (total, phase) => total + (pointsByPhase[phase] ?? 0),
+    0,
+  );
 }

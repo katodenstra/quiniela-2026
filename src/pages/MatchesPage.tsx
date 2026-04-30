@@ -14,16 +14,23 @@ import {
   getQualificationStatus,
 } from "../data/qualification";
 import KnockoutBracket from "../components/KnockoutBracket";
-import { generateRoundOf32 } from "../data/knockout";
+import type { KnockoutMatch } from "../data/knockout";
 import { useFriendPredictions } from "../state/FriendPredictionsContext";
+import { getPhaseTitle, getTeamName } from "../utils/phaseScoring";
 
 import ScrollableTabs from "../components/ScrollableTabs";
 
 type MatchFilter = "all" | "predicted" | "unpredicted";
 
 function formatMatchDateLabel(date: string, time: string) {
+  if (date === "TBD") return "TBD";
   const [year, month, day] = date.split("-");
   return `${day}/${month}/${year} • ${time}`;
+}
+
+function getTeamCode(match: GroupStageMatch | KnockoutMatch, side: "home" | "away") {
+  const team = side === "home" ? match.homeTeam : match.awayTeam;
+  return "code" in team ? team.code : team.teamCode;
 }
 
 function MatchesPage({
@@ -38,7 +45,7 @@ function MatchesPage({
   } = useFriendPredictions();
   const [matchFilter, setMatchFilter] = useState<MatchFilter>("all");
   const isGroupPhase = pool.phase === "groups";
-  const isRoundOf32Phase = pool.phase === "roundOf32";
+  const isKnockoutPhase = !isGroupPhase;
 
   const hasGroupResults =
     matches.length > 0 &&
@@ -78,16 +85,13 @@ function MatchesPage({
   );
 
   const roundOf32 = useMemo(
-    () =>
-      hasGroupResults && bestThirds.length >= 8
-        ? generateRoundOf32(standingsByGroup, bestThirds)
-        : [],
-    [hasGroupResults, bestThirds, standingsByGroup],
+    () => pool.getMatchesForPhase("roundOf32") as KnockoutMatch[],
+    [pool],
   );
 
   const knockoutMatches = useMemo(
-    () => (pool.phase === "roundOf32" ? roundOf32 : []),
-    [pool.phase, roundOf32],
+    () => (isKnockoutPhase ? pool.visibleMatches : []),
+    [isKnockoutPhase, pool.visibleMatches],
   );
 
   const filteredVisibleMatches = useMemo(() => {
@@ -112,7 +116,7 @@ function MatchesPage({
     });
   }, [knockoutMatches, pool, matchFilter]);
 
-  const roundOf32PredictedCount = useMemo(() => {
+  const knockoutPredictedCount = useMemo(() => {
     return knockoutMatches.reduce((count, match) => {
       const pred = pool.getPrediction(match.id);
       const isComplete = pred.home !== null && pred.away !== null;
@@ -120,8 +124,8 @@ function MatchesPage({
     }, 0);
   }, [knockoutMatches, pool]);
 
-  const roundOf32MissingCount = Math.max(
-    knockoutMatches.length - roundOf32PredictedCount,
+  const knockoutMissingCount = Math.max(
+    knockoutMatches.length - knockoutPredictedCount,
     0,
   );
 
@@ -435,10 +439,10 @@ function MatchesPage({
                 <MatchCard
                   key={match.id}
                   matchId={match.id}
-                  homeTeamName={match.homeTeam.name}
-                  homeTeamCode={match.homeTeam.code}
-                  awayTeamName={match.awayTeam.name}
-                  awayTeamCode={match.awayTeam.code}
+                  homeTeamName={getTeamName(match, "home")}
+                  homeTeamCode={getTeamCode(match, "home")}
+                  awayTeamName={getTeamName(match, "away")}
+                  awayTeamCode={getTeamCode(match, "away")}
                   kickoff={`${match.date} ${match.time}`}
                   headerContextLabel={headerContextLabel}
                   headerDateLabel={headerDateLabel}
@@ -457,11 +461,11 @@ function MatchesPage({
         </>
       )}
 
-      {isRoundOf32Phase && (
+      {isKnockoutPhase && (
         <>
           <PageIntro
-            title="Round of 32"
-            description="Group stage is complete. Now predict the first knockout round."
+            title={getPhaseTitle(pool.phase)}
+            description="Predict the current knockout phase and review simulated results as the bracket advances."
           />
 
           <ActionBar
@@ -507,8 +511,8 @@ function MatchesPage({
                 minWidth: 0,
               }}
             >
-              {roundOf32MissingCount} remaining in Round of 32 •{" "}
-              {roundOf32PredictedCount}/{knockoutMatches.length} saved{" "}
+              {knockoutMissingCount} remaining in {getPhaseTitle(pool.phase)} •{" "}
+              {knockoutPredictedCount}/{knockoutMatches.length} saved{" "}
             </div>
 
             <div
@@ -594,7 +598,7 @@ function MatchesPage({
                 }}
               >
                 {matchFilter === "all"
-                  ? "Round of 32 matches are not available yet."
+                  ? `${getPhaseTitle(pool.phase)} matches are not available yet.`
                   : "No matches match the current filter."}
               </div>
             )}
@@ -604,21 +608,23 @@ function MatchesPage({
               const matchSubmissionStatus = pool.getMatchSubmissionStatus(
                 match.id,
               );
-              const headerContextLabel = "Round of 32";
+              const headerContextLabel = getPhaseTitle(pool.phase);
               const headerDateLabel = formatMatchDateLabel(
                 match.date,
                 match.time,
               );
               const showSavedIndicator = matchSubmissionStatus === "saved";
+              const res = pool.results[match.id];
+              const pts = res ? scorePrediction(pred, res) : undefined;
 
               return (
                 <MatchCard
                   key={match.id}
                   matchId={match.id}
-                  homeTeamName={match.homeTeam.teamName}
-                  homeTeamCode={match.homeTeam.teamCode}
-                  awayTeamName={match.awayTeam.teamName}
-                  awayTeamCode={match.awayTeam.teamCode}
+                  homeTeamName={getTeamName(match, "home")}
+                  homeTeamCode={getTeamCode(match, "home")}
+                  awayTeamName={getTeamName(match, "away")}
+                  awayTeamCode={getTeamCode(match, "away")}
                   kickoff={`${match.date} • ${match.time}`}
                   headerContextLabel={headerContextLabel}
                   headerDateLabel={headerDateLabel}
@@ -627,6 +633,8 @@ function MatchesPage({
                   prediction={pred}
                   onPredictionChange={pool.handlePredictionChange}
                   isLocked={!pool.isEditable}
+                  result={res}
+                  points={pts}
                   showSavedIndicator={showSavedIndicator}
                 />
               );
