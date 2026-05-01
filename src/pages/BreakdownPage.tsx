@@ -90,10 +90,17 @@ function DashboardCard({
 }) {
   const accent =
     tone === "positive"
-      ? "rgba(12, 157, 97, 0.16)"
+      ? "rgba(12, 157, 97, 0.24)"
       : tone === "warning"
-        ? "rgba(236, 45, 48, 0.16)"
+        ? "rgba(236, 45, 48, 0.24)"
         : "rgba(58, 112, 226, 0.16)";
+
+  const surface =
+    tone === "positive"
+      ? "rgba(12, 157, 97, 0.12)"
+      : tone === "warning"
+        ? "rgba(236, 45, 48, 0.10)"
+        : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))";
 
   return (
     <div
@@ -101,8 +108,7 @@ function DashboardCard({
         border: "1px solid var(--border-subtle)",
         borderRadius: "20px",
         padding: "1rem 1.1rem",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+        background: surface,
         boxShadow: `0 0 0 1px ${accent}, var(--shadow-soft)`,
       }}
     >
@@ -248,9 +254,11 @@ function getCountryInsights(rows: BreakdownRow[]) {
   rows.forEach(({ match, res, pts }) => {
     if (!res || typeof pts !== "number") return;
 
-    [getTeamName(match, "home"), getTeamName(match, "away")].forEach((country) => {
-      pointsByCountry.set(country, (pointsByCountry.get(country) ?? 0) + pts);
-    });
+    [getTeamName(match, "home"), getTeamName(match, "away")].forEach(
+      (country) => {
+        pointsByCountry.set(country, (pointsByCountry.get(country) ?? 0) + pts);
+      },
+    );
   });
 
   const sorted = Array.from(pointsByCountry.entries()).sort((a, b) => {
@@ -495,7 +503,7 @@ function BreakdownPage({
         style={{
           display: "grid",
           gridTemplateColumns:
-            "minmax(0, 1.05fr) minmax(0, 0.95fr) minmax(0, 1fr)",
+            "minmax(0, 1.08fr) minmax(0, 0.82fr) minmax(0, 1fr)",
           gap: "0.9rem",
           marginBottom: "1.25rem",
           alignItems: "stretch",
@@ -516,11 +524,11 @@ function BreakdownPage({
         >
           <div
             style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: "0.75rem",
-              marginBottom: "0.9rem",
+              display: "grid",
+              gap: "0.55rem",
+              marginBottom: "0.85rem",
+              justifyItems: "center",
+              textAlign: "center",
             }}
           >
             <div
@@ -529,7 +537,6 @@ function BreakdownPage({
                 fontWeight: 700,
                 fontSize: "1rem",
                 lineHeight: 1.2,
-                whiteSpace: "nowrap",
               }}
             >
               Your current standing
@@ -543,11 +550,10 @@ function BreakdownPage({
                 background: "rgba(255,255,255,0.04)",
                 color: "var(--text-primary)",
                 fontWeight: 700,
-                fontSize: "0.82rem",
-                padding: "0.42rem 0.7rem",
+                fontSize: "0.8rem",
+                padding: "0.4rem 0.7rem",
                 cursor: "pointer",
                 whiteSpace: "nowrap",
-                flexShrink: 0,
               }}
             >
               View full leaderboard
@@ -570,11 +576,11 @@ function BreakdownPage({
                     key={entry.id}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "3rem minmax(0, 1fr) auto",
-                      gap: "0.75rem",
+                      gridTemplateColumns: "minmax(0, 1fr) auto",
+                      gap: "0.65rem",
                       alignItems: "center",
-                      padding: "0.65rem 0.75rem",
-                      borderRadius: "14px",
+                      padding: "0.56rem 0.7rem",
+                      borderRadius: "13px",
                       border: "1px solid var(--border-subtle)",
                       background: isMe
                         ? "rgba(58, 112, 226, 0.14)"
@@ -583,23 +589,34 @@ function BreakdownPage({
                   >
                     <div
                       style={{
-                        color: "var(--text-muted)",
-                        fontWeight: 800,
-                      }}
-                    >
-                      #{rank}
-                    </div>
-                    <div
-                      style={{
-                        color: "var(--text-primary)",
-                        fontWeight: isMe ? 800 : 600,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.55rem",
                         minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
+                        textAlign: "left",
                       }}
                     >
-                      {entry.name}
+                      <span
+                        style={{
+                          color: "var(--text-muted)",
+                          fontWeight: 800,
+                          flexShrink: 0,
+                        }}
+                      >
+                        #{rank}
+                      </span>
+                      <span
+                        style={{
+                          color: "var(--text-primary)",
+                          fontWeight: isMe ? 800 : 600,
+                          minWidth: 0,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {entry.name}
+                      </span>
                     </div>
                     <div
                       style={{
@@ -634,19 +651,18 @@ function BreakdownPage({
               color: "var(--text-primary)",
               fontWeight: 700,
               marginBottom: "0.75rem",
+              textAlign: "center",
             }}
           >
             Prediction status
           </div>
           <div
             style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-start",
-              justifyContent: "flex-start",
-              gap: "0.75rem",
+              display: "grid",
+              alignContent: "start",
+              gap: "0.65rem",
               flex: 1,
-              padding: "0.1rem 0",
+              padding: "0.05rem 0",
             }}
           >
             <div
@@ -682,9 +698,9 @@ function BreakdownPage({
               style={{
                 color: "var(--text-secondary)",
                 display: "grid",
-                gap: "0.48rem",
-                lineHeight: 1.4,
-                fontSize: "0.96rem",
+                gap: "0.42rem",
+                lineHeight: 1.36,
+                fontSize: "0.94rem",
                 justifyItems: "start",
                 textAlign: "left",
               }}
@@ -698,7 +714,7 @@ function BreakdownPage({
                         ? "var(--text-primary)"
                         : "var(--text-secondary)",
                     fontWeight: index === 0 ? 700 : 500,
-                    maxWidth: "28ch",
+                    maxWidth: "24ch",
                   }}
                 >
                   {line}
@@ -726,6 +742,7 @@ function BreakdownPage({
               color: "var(--text-primary)",
               fontWeight: 700,
               marginBottom: "0.75rem",
+              textAlign: "center",
             }}
           >
             Country insights
@@ -734,9 +751,10 @@ function BreakdownPage({
           <div
             style={{
               display: "grid",
-              gap: "0.7rem",
+              gap: "0.75rem",
               alignContent: "start",
               flex: 1,
+              paddingTop: "0.1rem",
             }}
           >
             <div
@@ -763,8 +781,8 @@ function BreakdownPage({
                   fontWeight: 700,
                   marginTop: "0.35rem",
                   lineHeight: 1.32,
-                  maxWidth: "26ch",
-                  margin: "0.35rem auto 0",
+                  maxWidth: "22ch",
+                  margin: "0.32rem auto 0",
                 }}
               >
                 {countryInsights.best
@@ -797,8 +815,8 @@ function BreakdownPage({
                   fontWeight: 700,
                   marginTop: "0.35rem",
                   lineHeight: 1.32,
-                  maxWidth: "26ch",
-                  margin: "0.35rem auto 0",
+                  maxWidth: "22ch",
+                  margin: "0.32rem auto 0",
                 }}
               >
                 {countryInsights.worst
@@ -1014,7 +1032,9 @@ function BreakdownPage({
                   >
                     {getFlagUrl(getTeamCode(match, "home")) && (
                       <img
-                        src={getFlagUrl(getTeamCode(match, "home")) ?? undefined}
+                        src={
+                          getFlagUrl(getTeamCode(match, "home")) ?? undefined
+                        }
                         alt=""
                         width={22}
                         height={22}
@@ -1041,7 +1061,9 @@ function BreakdownPage({
                   >
                     {getFlagUrl(getTeamCode(match, "away")) && (
                       <img
-                        src={getFlagUrl(getTeamCode(match, "away")) ?? undefined}
+                        src={
+                          getFlagUrl(getTeamCode(match, "away")) ?? undefined
+                        }
                         alt=""
                         width={22}
                         height={22}

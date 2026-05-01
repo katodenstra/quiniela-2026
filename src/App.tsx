@@ -58,7 +58,10 @@ function AppRoutes() {
             path="/leaderboard"
             element={<LeaderboardPage matches={matches} pool={pool} />}
           />
-          <Route path="/friends" element={<FriendsPage />} />
+          <Route
+            path="/friends"
+            element={<FriendsPage matches={matches} pool={pool} />}
+          />
           <Route
             path="/friends/:friendId"
             element={<FriendPage matches={matches} pool={pool} />}

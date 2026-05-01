@@ -11,6 +11,8 @@ import {
 } from "../data/knockout";
 import { getBestThirdPlacedTeams } from "../data/qualification";
 import { calculateGroupStandings } from "../data/standings";
+export { getOutcome, scorePrediction } from "../utils/scoring";
+import { scorePrediction } from "../utils/scoring";
 
 export type Prediction = { home: number | null; away: number | null };
 export type PredictionsByMatchId = Record<number, Prediction>;
@@ -44,23 +46,6 @@ const GROUP_KEY = "prediction_pool:selected_group:v1";
 const VIEW_MODE_KEY = "prediction_pool:view_mode:v1";
 const MATCHDAY_KEY = "prediction_pool:selected_matchday:v1";
 const PHASE_KEY = "prediction_pool:phase:v1";
-
-export function getOutcome(home: number, away: number) {
-  if (home === away) return "draw";
-  return home > away ? "home" : "away";
-}
-
-export function scorePrediction(pred: Prediction, res: Result) {
-  if (pred.home === null || pred.away === null) return 0;
-
-  if (pred.home === res.home && pred.away === res.away) return 3;
-
-  const predOutcome = getOutcome(pred.home, pred.away);
-  const resOutcome = getOutcome(res.home, res.away);
-  if (predOutcome === resOutcome) return 1;
-
-  return 0;
-}
 
 export function randomScore() {
   return Math.floor(Math.random() * 5);
@@ -485,9 +470,11 @@ export function usePoolState(matches: GroupStageMatch[]) {
   };
 
   const resetSimulation = () => {
+    setPredictions(emptyPredictionsByPhase);
     setResults({});
     setPredictionStateByPhase(emptyPredictionStateByPhase);
     setActivePhase("groups");
+    localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(RESULTS_KEY);
     localStorage.setItem(
       STATE_KEY,
