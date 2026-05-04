@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   getAllFriendPredictions,
   getFriends,
@@ -44,6 +44,13 @@ type AllFriendPredictionsByPhase = Partial<
 
 type ExpandedSections = Partial<Record<TournamentPhase, boolean>>;
 
+type FriendPageLocationState = {
+  from?: {
+    pathname: string;
+    label: string;
+  };
+};
+
 function getDefaultExpandedSections(
   phaseContexts: PhaseScoringContext[],
   currentPhase: TournamentPhase,
@@ -64,6 +71,8 @@ function FriendPage({
   pool: PoolState;
 }) {
   const { friendId: rawFriendId } = useParams<{ friendId: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
   const friendId = useMemo(() => {
     if (!rawFriendId) return undefined;
 
@@ -115,7 +124,8 @@ function FriendPage({
         const entries = await Promise.all(
           scorableComparisonPhases.map(async (phase) => {
             const apiPredictions = await getAllFriendPredictions(phase);
-            const generatedPredictions = generatedFriendPredictions[phase] ?? {};
+            const generatedPredictions =
+              generatedFriendPredictions[phase] ?? {};
 
             return [
               phase,
@@ -164,6 +174,20 @@ function FriendPage({
     if (!friendId || !friendsApi.data) return null;
     return friendsApi.data.find((f) => f.id === friendId) ?? null;
   }, [friendsApi.data, friendId]);
+
+  const returnTarget = useMemo(() => {
+    const state = location.state as FriendPageLocationState | null;
+    const from = state?.from;
+
+    if (from?.pathname && from?.label) {
+      return from;
+    }
+
+    return {
+      pathname: "/friends",
+      label: "Friends",
+    };
+  }, [location.state]);
 
   const loading = friendsApi.loading || predictionsLoading;
   const error = friendsApi.error || predictionsError;
@@ -223,10 +247,7 @@ function FriendPage({
         ...context,
         friendPoints,
         myPoints,
-        sameCount: rows.reduce(
-          (count, row) => count + (row.isSame ? 1 : 0),
-          0,
-        ),
+        sameCount: rows.reduce((count, row) => count + (row.isSame ? 1 : 0), 0),
         differentCount: rows.reduce(
           (count, row) => count + (row.isDiff ? 1 : 0),
           0,
@@ -270,15 +291,38 @@ function FriendPage({
     pool.results,
   ]);
 
-  const friendRank = friendId ? getLeaderboardRank(leaderboard, friendId) : null;
+  const friendRank = friendId
+    ? getLeaderboardRank(leaderboard, friendId)
+    : null;
 
   if (loading) {
     return (
       <section>
-        <PageIntro
-          title={friend?.name ?? "Friend"}
-          description="Compare predictions match by match and review scoring outcomes."
-        />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr",
+            alignItems: "start",
+            gap: "0.75rem",
+            marginBottom: "1.25rem",
+          }}
+        >
+          <div style={{ justifySelf: "start" }}>
+            <Button
+              variant="ghost"
+              onClick={() => navigate(returnTarget.pathname)}
+            >
+              ← Back to {returnTarget.label}
+            </Button>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <PageIntro
+              title={friend?.name ?? "Friend"}
+              description="Compare predictions match by match and review scoring outcomes."
+            />
+          </div>
+          <div aria-hidden="true" />
+        </div>
         <div
           className="widget"
           style={{
@@ -298,10 +342,31 @@ function FriendPage({
   if (error) {
     return (
       <section>
-        <PageIntro
-          title="Friend"
-          description="Compare predictions match by match and review scoring outcomes."
-        />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr",
+            alignItems: "start",
+            gap: "0.75rem",
+            marginBottom: "1.25rem",
+          }}
+        >
+          <div style={{ justifySelf: "start" }}>
+            <Button
+              variant="ghost"
+              onClick={() => navigate(returnTarget.pathname)}
+            >
+              ← Back to {returnTarget.label}
+            </Button>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <PageIntro
+              title="Friend"
+              description="Compare predictions match by match and review scoring outcomes."
+            />
+          </div>
+          <div aria-hidden="true" />
+        </div>
         <StatusBanner title="Could not load friend details." message={error} />
         <Button
           variant="ghost"
@@ -321,10 +386,31 @@ function FriendPage({
   if (!friend) {
     return (
       <section>
-        <PageIntro
-          title="Friend"
-          description="Compare predictions match by match and review scoring outcomes."
-        />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr",
+            alignItems: "start",
+            gap: "0.75rem",
+            marginBottom: "1.25rem",
+          }}
+        >
+          <div style={{ justifySelf: "start" }}>
+            <Button
+              variant="ghost"
+              onClick={() => navigate(returnTarget.pathname)}
+            >
+              ← Back to {returnTarget.label}
+            </Button>
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <PageIntro
+              title="Friend"
+              description="Compare predictions match by match and review scoring outcomes."
+            />
+          </div>
+          <div aria-hidden="true" />
+        </div>
         <StatusBanner
           title="Friend not found."
           message="This profile may no longer be available."
@@ -335,10 +421,31 @@ function FriendPage({
 
   return (
     <section>
-      <PageIntro
-        title={friend.name}
-        description="Compare predictions by phase and review cumulative scoring outcomes."
-      />
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr auto 1fr",
+          alignItems: "start",
+          gap: "0.75rem",
+          marginBottom: "1.25rem",
+        }}
+      >
+        <div style={{ justifySelf: "start" }}>
+          <Button
+            variant="ghost"
+            onClick={() => navigate(returnTarget.pathname)}
+          >
+            ← Back to {returnTarget.label}
+          </Button>
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <PageIntro
+            title={friend.name}
+            description="Compare predictions by phase and review cumulative scoring outcomes."
+          />
+        </div>
+        <div aria-hidden="true" />
+      </div>
 
       <div
         style={{

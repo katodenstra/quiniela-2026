@@ -491,6 +491,27 @@ export function usePoolState(matches: GroupStageMatch[]) {
     }
   };
 
+  const simulateSelectedDay = (day: string) => {
+    const matchesToSimulate = getMatchesForPhase(phase).filter(
+      (match) => match.date === day && results[match.id] === undefined,
+    );
+
+    if (matchesToSimulate.length === 0) return;
+
+    const nextResults: ResultsByMatchId = {
+      ...results,
+    };
+
+    for (const match of matchesToSimulate) {
+      nextResults[match.id] =
+        phase === "groups"
+          ? { home: randomScore(), away: randomScore() }
+          : randomKnockoutScore();
+    }
+
+    setResults(nextResults);
+  };
+
   const resetSimulation = () => {
     setPredictions(emptyPredictionsByPhase);
     setResults({});
@@ -650,6 +671,7 @@ export function usePoolState(matches: GroupStageMatch[]) {
     resetDraft,
     resetCurrentPhase,
     simulateCurrentStage,
+    simulateSelectedDay,
     resetSimulation,
     viewMode,
     setViewMode,

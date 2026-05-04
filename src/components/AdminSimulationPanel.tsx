@@ -1,3 +1,4 @@
+import * as React from "react";
 import { createPortal } from "react-dom";
 import type { TournamentPhase } from "../state/usePoolState";
 import Button from "./Button";
@@ -13,6 +14,10 @@ type AdminSimulationPanelProps = {
   onResetTournament: () => void;
   onFillMyPredictions: () => void;
   onGenerateFriendsPredictions: () => void;
+  availableSimulationDays?: { value: string; label: string }[];
+  selectedSimulationDay?: string;
+  setSelectedSimulationDay?: (day: string) => void;
+  onRunSelectedDaySimulation?: () => void;
 };
 
 const phaseOptions: { value: TournamentPhase; label: string }[] = [
@@ -35,7 +40,44 @@ function AdminSimulationPanel({
   onResetTournament,
   onFillMyPredictions,
   onGenerateFriendsPredictions,
+  availableSimulationDays = [],
+  selectedSimulationDay = "",
+  setSelectedSimulationDay,
+  onRunSelectedDaySimulation,
 }: AdminSimulationPanelProps) {
+  const hasAvailableSimulationDays = availableSimulationDays.length > 0;
+  const effectiveSelectedSimulationDay = hasAvailableSimulationDays
+    ? availableSimulationDays.some(
+        (option) => option.value === selectedSimulationDay,
+      )
+      ? selectedSimulationDay
+      : (availableSimulationDays[0]?.value ?? "")
+    : "";
+  const canRunSelectedDaySimulation =
+    hasAvailableSimulationDays &&
+    Boolean(effectiveSelectedSimulationDay) &&
+    Boolean(onRunSelectedDaySimulation);
+
+  React.useEffect(() => {
+    if (!setSelectedSimulationDay) return;
+
+    if (!hasAvailableSimulationDays) {
+      if (selectedSimulationDay !== "") {
+        setSelectedSimulationDay("");
+      }
+      return;
+    }
+
+    if (effectiveSelectedSimulationDay !== selectedSimulationDay) {
+      setSelectedSimulationDay(effectiveSelectedSimulationDay);
+    }
+  }, [
+    effectiveSelectedSimulationDay,
+    hasAvailableSimulationDays,
+    selectedSimulationDay,
+    setSelectedSimulationDay,
+  ]);
+
   const panelUi = (
     <>
       <button
@@ -287,7 +329,117 @@ function AdminSimulationPanel({
               Simulation
             </div>
 
-            <Button variant="primary" onClick={onRunSimulation}>
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.45rem",
+              }}
+            >
+              <label
+                htmlFor="admin-simulation-day"
+                style={{
+                  color: "var(--text-secondary)",
+                  fontSize: "0.88rem",
+                  fontWeight: 600,
+                }}
+              >
+                Available day
+              </label>
+
+              <div
+                style={{
+                  position: "relative",
+                }}
+              >
+                <select
+                  id="admin-simulation-day"
+                  value={effectiveSelectedSimulationDay}
+                  onChange={(e) => setSelectedSimulationDay?.(e.target.value)}
+                  disabled={
+                    !hasAvailableSimulationDays || !setSelectedSimulationDay
+                  }
+                  style={{
+                    width: "100%",
+                    padding: "0.82rem 2.75rem 0.82rem 0.95rem",
+                    borderRadius: "999px",
+                    border: "1px solid var(--border-subtle)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: hasAvailableSimulationDays
+                      ? "var(--text-primary)"
+                      : "var(--text-muted)",
+                    fontWeight: 600,
+                    outline: "none",
+                    appearance: "none",
+                    WebkitAppearance: "none",
+                    MozAppearance: "none",
+                    boxShadow: "var(--shadow-soft)",
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)",
+                    cursor:
+                      hasAvailableSimulationDays && setSelectedSimulationDay
+                        ? "pointer"
+                        : "not-allowed",
+                  }}
+                >
+                  {hasAvailableSimulationDays ? (
+                    availableSimulationDays.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No days available</option>
+                  )}
+                </select>
+
+                <span
+                  className="material-symbols-rounded"
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    right: "0.9rem",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    color: "var(--text-secondary)",
+                    pointerEvents: "none",
+                    fontSize: "1.15rem",
+                  }}
+                >
+                  expand_more
+                </span>
+              </div>
+
+              <div
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "0.84rem",
+                  lineHeight: 1.4,
+                }}
+              >
+                Simulates all currently available matches for the selected day.
+                Completed days should disappear from this list.
+              </div>
+            </div>
+
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (!effectiveSelectedSimulationDay) return;
+                if (
+                  effectiveSelectedSimulationDay !== selectedSimulationDay &&
+                  setSelectedSimulationDay
+                ) {
+                  setSelectedSimulationDay(effectiveSelectedSimulationDay);
+                }
+                onRunSelectedDaySimulation?.();
+              }}
+              disabled={!canRunSelectedDaySimulation}
+            >
+              Simulate selected day
+            </Button>
+
+            <Button variant="ghost" onClick={onRunSimulation}>
               Run simulation
             </Button>
           </section>

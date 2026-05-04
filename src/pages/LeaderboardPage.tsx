@@ -17,7 +17,6 @@ import {
   computeCumulativeTournamentPoints,
   computePointsByPhase,
   getPhaseScoringContexts,
-  getResolvedScoringContexts,
   scorableComparisonPhases,
 } from "../utils/phaseScoring";
 import {
@@ -66,6 +65,12 @@ function PodiumCard({
   return (
     <Link
       to={`/friends/${encodeURIComponent(entry.id)}`}
+      state={{
+        from: {
+          pathname: "/leaderboard",
+          label: "Leaderboard",
+        },
+      }}
       style={{
         minHeight: height,
         border: `1px solid ${borderColor}`,
@@ -238,12 +243,15 @@ function LeaderboardPage({
     [matches, pool.results],
   );
 
-  const resolvedPhaseContexts = useMemo(
-    () => getResolvedScoringContexts(phaseContexts),
-    [phaseContexts],
+  const scorablePhaseContexts = useMemo(
+    () =>
+      phaseContexts.filter((context) =>
+        context.matches.some((match) => pool.results[match.id] !== undefined),
+      ),
+    [phaseContexts, pool.results],
   );
 
-  const resultsReady = resolvedPhaseContexts.length > 0;
+  const resultsReady = scorablePhaseContexts.length > 0;
 
   const myEntry: LeaderboardEntry = useMemo(() => {
     if (!resultsReady) {
@@ -256,7 +264,7 @@ function LeaderboardPage({
     }
 
     const pointsByPhase = computePointsByPhase(
-      resolvedPhaseContexts,
+      scorablePhaseContexts,
       pool.predictions,
       pool.results,
     );
@@ -267,7 +275,7 @@ function LeaderboardPage({
       points: computeCumulativeTournamentPoints(pointsByPhase),
       pointsByPhase,
     };
-  }, [resultsReady, resolvedPhaseContexts, pool.predictions, pool.results]);
+  }, [resultsReady, scorablePhaseContexts, pool.predictions, pool.results]);
 
   const [friendEntries, setFriendEntries] = useState<LeaderboardEntry[]>([]);
 
@@ -287,7 +295,7 @@ function LeaderboardPage({
         const entries = await Promise.all(
           friends.map(async (f) => {
             const predictionsByPhase = await Promise.all(
-              resolvedPhaseContexts.map(async (context) => {
+              scorablePhaseContexts.map(async (context) => {
                 const generated =
                   generatedFriendPredictions[context.phase]?.[f.id];
                 const predictions =
@@ -298,12 +306,12 @@ function LeaderboardPage({
               }),
             );
 
-            const predictionsByResolvedPhase = Object.fromEntries(
+            const predictionsByScorablePhase = Object.fromEntries(
               predictionsByPhase,
             ) as Partial<Record<TournamentPhase, PredictionsByMatchId>>;
             const pointsByPhase = computePointsByPhase(
-              resolvedPhaseContexts,
-              predictionsByResolvedPhase,
+              scorablePhaseContexts,
+              predictionsByScorablePhase,
               pool.results,
             );
 
@@ -337,7 +345,7 @@ function LeaderboardPage({
   }, [
     friends,
     resultsReady,
-    resolvedPhaseContexts,
+    scorablePhaseContexts,
     pool.results,
     generatedFriendPredictions,
   ]);
@@ -829,6 +837,12 @@ function LeaderboardPage({
                     <Link
                       key={e.id}
                       to={`/friends/${encodeURIComponent(e.id)}`}
+                      state={{
+                        from: {
+                          pathname: "/leaderboard",
+                          label: "Leaderboard",
+                        },
+                      }}
                       style={{
                         ...rowStyle,
                         color: "inherit",
