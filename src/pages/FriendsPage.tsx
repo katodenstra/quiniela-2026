@@ -20,7 +20,6 @@ import type {
 } from "../state/usePoolState";
 import {
   getPhaseScoringContexts,
-  getResolvedScoringContexts,
   scorableComparisonPhases,
 } from "../utils/phaseScoring";
 import { computeFriendPoolInsights } from "../utils/friendPoolInsights";
@@ -112,6 +111,79 @@ function Avatar({ name }: { name: string }) {
 
 function formatDelta(delta: number) {
   return formatFriendDelta(delta);
+}
+
+function getFlagEmojiForTeam(teamName: string) {
+  const normalized = teamName.trim().toLowerCase();
+
+  const flagMap: Record<string, string> = {
+    argentina: "🇦🇷",
+    australia: "🇦🇺",
+    austria: "🇦🇹",
+    belgium: "🇧🇪",
+    bolivia: "🇧🇴",
+    bosnia: "🇧🇦",
+    "bosnia & herzegovina": "🇧🇦",
+    brazil: "🇧🇷",
+    cameroon: "🇨🇲",
+    canada: "🇨🇦",
+    chile: "🇨🇱",
+    china: "🇨🇳",
+    colombia: "🇨🇴",
+    "costa rica": "🇨🇷",
+    croatia: "🇭🇷",
+    "czech republic": "🇨🇿",
+    denmark: "🇩🇰",
+    ecuador: "🇪🇨",
+    egypt: "🇪🇬",
+    england: "🏴",
+    finland: "🇫🇮",
+    france: "🇫🇷",
+    germany: "🇩🇪",
+    ghana: "🇬🇭",
+    greece: "🇬🇷",
+    honduras: "🇭🇳",
+    iceland: "🇮🇸",
+    iran: "🇮🇷",
+    iraq: "🇮🇶",
+    ireland: "🇮🇪",
+    italy: "🇮🇹",
+    jamaica: "🇯🇲",
+    japan: "🇯🇵",
+    mexico: "🇲🇽",
+    morocco: "🇲🇦",
+    netherlands: "🇳🇱",
+    "new zealand": "🇳🇿",
+    nigeria: "🇳🇬",
+    norway: "🇳🇴",
+    panama: "🇵🇦",
+    paraguay: "🇵🇾",
+    peru: "🇵🇪",
+    poland: "🇵🇱",
+    portugal: "🇵🇹",
+    qatar: "🇶🇦",
+    romania: "🇷🇴",
+    "saudi arabia": "🇸🇦",
+    scotland: "🏴",
+    senegal: "🇸🇳",
+    serbia: "🇷🇸",
+    "south africa": "🇿🇦",
+    "south korea": "🇰🇷",
+    spain: "🇪🇸",
+    sweden: "🇸🇪",
+    switzerland: "🇨🇭",
+    tunisia: "🇹🇳",
+    turkey: "🇹🇷",
+    ukraine: "🇺🇦",
+    uruguay: "🇺🇾",
+    uzbekistan: "🇺🇿",
+    usa: "🇺🇸",
+    "united states": "🇺🇸",
+    venezuela: "🇻🇪",
+    wales: "🏴",
+  };
+
+  return flagMap[normalized] ?? "🏳️";
 }
 
 function DeltaPill({ delta }: { delta: number }) {
@@ -723,11 +795,13 @@ function PoolInsightSubcard({
   copy,
   highlight,
   tone,
+  flagEmoji,
 }: {
   label: string;
   copy?: string;
   highlight?: string;
   tone: "positive" | "negative";
+  flagEmoji?: string;
 }) {
   return (
     <div
@@ -769,6 +843,7 @@ function PoolInsightSubcard({
           <>
             {copy}
             <strong style={{ fontWeight: 800 }}>{highlight}</strong>
+            {flagEmoji ? ` ${flagEmoji}` : ""}
             {" matches"}
           </>
         ) : (
@@ -852,9 +927,12 @@ function FriendsPage({
     [matches, pool.results],
   );
 
-  const resolvedPhaseContexts = useMemo(
-    () => getResolvedScoringContexts(phaseContexts),
-    [phaseContexts],
+  const scorablePhaseContexts = useMemo(
+    () =>
+      phaseContexts.filter((context) =>
+        context.matches.some((match) => pool.results[match.id] !== undefined),
+      ),
+    [phaseContexts, pool.results],
   );
 
   const leaderboard = useMemo(
@@ -864,7 +942,7 @@ function FriendsPage({
           friends: friends ?? [],
           myPredictions: pool.predictions,
           friendPredictionsByPhase,
-          resolvedPhaseContexts,
+          resolvedPhaseContexts: scorablePhaseContexts,
           results: pool.results,
         }),
       ),
@@ -872,7 +950,7 @@ function FriendsPage({
       friends,
       pool.predictions,
       friendPredictionsByPhase,
-      resolvedPhaseContexts,
+      scorablePhaseContexts,
       pool.results,
     ],
   );
@@ -939,10 +1017,10 @@ function FriendsPage({
       computeFriendPoolInsights({
         friends: friends ?? [],
         friendPredictionsByPhase,
-        resolvedPhaseContexts,
+        resolvedPhaseContexts: scorablePhaseContexts,
         results: pool.results,
       }),
-    [friends, friendPredictionsByPhase, pool.results, resolvedPhaseContexts],
+    [friends, friendPredictionsByPhase, pool.results, scorablePhaseContexts],
   );
 
   const visibleFriends = useMemo(() => {
@@ -1145,6 +1223,13 @@ function FriendsPage({
                     : "No resolved team data yet"
                 }
                 highlight={poolTeamInsights.mostReliableTeam?.teamName}
+                flagEmoji={
+                  poolTeamInsights.mostReliableTeam
+                    ? getFlagEmojiForTeam(
+                        poolTeamInsights.mostReliableTeam.teamName,
+                      )
+                    : undefined
+                }
               />
               <PoolInsightSubcard
                 label="Least predictable team"
@@ -1155,6 +1240,13 @@ function FriendsPage({
                     : "No resolved team data yet"
                 }
                 highlight={poolTeamInsights.leastPredictableTeam?.teamName}
+                flagEmoji={
+                  poolTeamInsights.leastPredictableTeam
+                    ? getFlagEmojiForTeam(
+                        poolTeamInsights.leastPredictableTeam.teamName,
+                      )
+                    : undefined
+                }
               />
             </InsightCard>
           </section>
