@@ -338,12 +338,13 @@ function FeaturedFriendCard({
         position: "relative",
         display: "grid",
         gridTemplateColumns: "auto minmax(0, 1fr) auto",
-        alignItems: "start",
-        gap: "0.78rem",
-        minHeight: "7rem",
+        alignItems: "center",
+        gap: "0.9rem",
+        minHeight: 0,
+        height: "100%",
         border: "1px solid var(--border-subtle)",
         borderRadius: "18px",
-        padding: "0.88rem 0.9rem",
+        padding: "1rem 0.95rem",
         textDecoration: "none",
         color: "inherit",
         background:
@@ -370,9 +371,9 @@ function FeaturedFriendCard({
         style={{
           minWidth: 0,
           display: "grid",
-          alignContent: "start",
-          gap: "0.36rem",
-          paddingTop: "0.1rem",
+          alignContent: "center",
+          gap: "0.46rem",
+          paddingTop: "0.04rem",
         }}
       >
         <div
@@ -391,11 +392,11 @@ function FeaturedFriendCard({
           style={{
             display: "flex",
             alignItems: "center",
-            gap: "0.38rem",
+            gap: "0.42rem",
             flexWrap: "wrap",
             color: "var(--text-muted)",
-            fontSize: "0.84rem",
-            lineHeight: 1.25,
+            fontSize: "0.86rem",
+            lineHeight: 1.28,
           }}
         >
           <span
@@ -409,7 +410,7 @@ function FeaturedFriendCard({
           <span aria-hidden="true">•</span>
           <span>Rank: {item.rank === null ? "-" : `#${item.rank}`}</span>
         </div>
-        <div>
+        <div style={{ paddingTop: "0.12rem" }}>
           <DeltaPill delta={item.delta} />
         </div>
       </div>
@@ -429,17 +430,18 @@ function EmptyFeaturedSlot({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       style={{
-        minHeight: "7rem",
+        minHeight: 0,
+        height: "100%",
         border: "1px dashed var(--border-subtle)",
         borderRadius: "18px",
-        padding: "0.88rem 0.9rem",
+        padding: "1rem 0.95rem",
         background: "rgba(255,255,255,0.025)",
         color: "var(--text-secondary)",
         cursor: "pointer",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        gap: "0.68rem",
+        gap: "0.78rem",
         textAlign: "left",
       }}
     >
@@ -1182,9 +1184,11 @@ function FriendsPage({
               <div
                 style={{
                   display: "grid",
-                  gap: "0.58rem",
-                  alignContent: "start",
-                  gridAutoRows: "min-content",
+                  gridTemplateRows: `repeat(${maxFeaturedFriends}, minmax(0, 1fr))`,
+                  gap: "0.75rem",
+                  alignContent: "stretch",
+                  height: "100%",
+                  minHeight: 0,
                 }}
               >
                 {Array.from({ length: maxFeaturedFriends }, (_, index) => {
