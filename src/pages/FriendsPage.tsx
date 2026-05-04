@@ -206,6 +206,12 @@ function FriendCard({
   return (
     <Link
       to={`/friends/${encodeURIComponent(item.friend.id)}`}
+      state={{
+        from: {
+          pathname: "/friends",
+          label: "Friends",
+        },
+      }}
       style={{
         display: "grid",
         gridTemplateColumns:
@@ -334,6 +340,12 @@ function FeaturedFriendCard({
   return (
     <Link
       to={`/friends/${encodeURIComponent(item.friend.id)}`}
+      state={{
+        from: {
+          pathname: "/friends",
+          label: "Friends",
+        },
+      }}
       style={{
         position: "relative",
         display: "grid",

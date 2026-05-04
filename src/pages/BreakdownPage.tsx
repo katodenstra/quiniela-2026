@@ -775,10 +775,38 @@ function BreakdownPage({
                 const rank =
                   leaderboard.findIndex((item) => item.id === entry.id) + 1;
                 const isMe = entry.id === "me";
+                const isClickable = !isMe;
 
                 return (
                   <div
                     key={entry.id}
+                    onClick={() => {
+                      if (!isClickable) return;
+                      navigate(`/friends/${encodeURIComponent(entry.id)}`, {
+                        state: {
+                          from: {
+                            pathname: "/breakdown",
+                            label: "Breakdown",
+                          },
+                        },
+                      });
+                    }}
+                    role={isClickable ? "button" : undefined}
+                    tabIndex={isClickable ? 0 : undefined}
+                    onKeyDown={(event) => {
+                      if (!isClickable) return;
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        navigate(`/friends/${encodeURIComponent(entry.id)}`, {
+                          state: {
+                            from: {
+                              pathname: "/breakdown",
+                              label: "Breakdown",
+                            },
+                          },
+                        });
+                      }
+                    }}
                     style={{
                       display: "grid",
                       gridTemplateColumns: "minmax(0, 1fr) auto",
@@ -790,6 +818,7 @@ function BreakdownPage({
                       background: isMe
                         ? "rgba(58, 112, 226, 0.14)"
                         : "rgba(255,255,255,0.035)",
+                      cursor: isClickable ? "pointer" : "default",
                     }}
                   >
                     <div
@@ -818,6 +847,10 @@ function BreakdownPage({
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
+                          textDecoration: isClickable ? "underline" : "none",
+                          textUnderlineOffset: isClickable
+                            ? "0.14em"
+                            : undefined,
                         }}
                       >
                         {entry.name}

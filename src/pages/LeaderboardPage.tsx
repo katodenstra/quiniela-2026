@@ -66,6 +66,12 @@ function PodiumCard({
   return (
     <Link
       to={`/friends/${encodeURIComponent(entry.id)}`}
+      state={{
+        from: {
+          pathname: "/leaderboard",
+          label: "Leaderboard",
+        },
+      }}
       style={{
         minHeight: height,
         border: `1px solid ${borderColor}`,
@@ -829,6 +835,12 @@ function LeaderboardPage({
                     <Link
                       key={e.id}
                       to={`/friends/${encodeURIComponent(e.id)}`}
+                      state={{
+                        from: {
+                          pathname: "/leaderboard",
+                          label: "Leaderboard",
+                        },
+                      }}
                       style={{
                         ...rowStyle,
                         color: "inherit",
