@@ -47,7 +47,7 @@ type BreakdownRow = {
 };
 
 const pointFilters: { key: PointsFilter; label: string }[] = [
-  { key: "all", label: "All" },
+  { key: "all", label: "All games" },
   { key: 3, label: "Exact score" },
   { key: 1, label: "Outcome" },
   { key: 0, label: "Miss" },
@@ -61,6 +61,10 @@ function getFlagUrl(code?: string | null) {
 function getTeamCode(match: ComparisonMatch, side: "home" | "away") {
   const team = side === "home" ? match.homeTeam : match.awayTeam;
   return "code" in team ? team.code : team.teamCode;
+}
+
+function getMatchGroup(match: ComparisonMatch) {
+  return "group" in match ? match.group : undefined;
 }
 
 function countryCodeToFlagEmoji(code?: string | null) {
@@ -312,6 +316,29 @@ function getCountryInsights(rows: BreakdownRow[]) {
   };
 }
 
+function getPhasePointTotal(rows: BreakdownRow[]) {
+  return rows.reduce((total, row) => total + (row.pts ?? 0), 0);
+}
+
+function getLatestOpenPhase(
+  currentPhase: TournamentPhase,
+  phaseContexts: ReturnType<typeof getPhaseScoringContexts>,
+) {
+  const currentContext = phaseContexts.find(
+    (context) => context.phase === currentPhase,
+  );
+
+  if (currentContext?.isAvailable || currentContext?.isResolved) {
+    return currentPhase;
+  }
+
+  const available = [...phaseContexts]
+    .filter((context) => context.isAvailable || context.isResolved)
+    .map((context) => context.phase);
+
+  return available[available.length - 1] ?? "groups";
+}
+
 function BreakdownPage({
   matches,
   pool,
@@ -323,6 +350,9 @@ function BreakdownPage({
   const [pointsFilter, setPointsFilter] = useState<PointsFilter>("all");
   const [sortMode, setSortMode] = useState<SortMode>("date");
   const [onlySimulated, setOnlySimulated] = useState(false);
+  const [expandedPhase, setExpandedPhase] = useState<TournamentPhase>(
+    pool.phase,
+  );
   const [friends, setFriends] = useState<Friend[]>([]);
   const [friendPredictionsByPhase, setFriendPredictionsByPhase] =
     useState<FriendPredictionsByPhase>({});
@@ -410,20 +440,6 @@ function BreakdownPage({
   const myLeaderboardEntry = leaderboard.find((entry) => entry.id === "me");
   const cumulativePoints = myLeaderboardEntry?.points ?? pool.myPoints;
 
-  const rows = useMemo<BreakdownRow[]>(() => {
-    return pool.visibleMatches.map((match) => {
-      const pred = pool.predictions[pool.phase]?.[match.id] ?? {
-        home: null,
-        away: null,
-      };
-      const res = pool.results[match.id];
-      const pts = res ? scorePrediction(pred, res) : undefined;
-      const hasPrediction = pred.home !== null && pred.away !== null;
-
-      return { match, pred, res, pts, hasPrediction };
-    });
-  }, [pool.visibleMatches, pool.predictions, pool.phase, pool.results]);
-
   const allScoredRows = useMemo<BreakdownRow[]>(() => {
     return resolvedPhaseContexts.flatMap((context) =>
       context.matches.map((match) => {
@@ -440,25 +456,53 @@ function BreakdownPage({
     );
   }, [resolvedPhaseContexts, pool.predictions, pool.results]);
 
-  const filtered = useMemo(() => {
-    return rows
-      .filter((row) => (onlySimulated ? Boolean(row.res) : true))
-      .filter((row) => {
-        if (pointsFilter === "all") return true;
-        return row.pts === pointsFilter;
-      })
-      .sort((a, b) => {
-        if (sortMode === "points") {
-          const ap = a.pts ?? -1;
-          const bp = b.pts ?? -1;
-          return bp - ap;
-        }
+  const phaseRows = useMemo(() => {
+    return phaseContexts.map((context) => {
+      const rows = context.matches.map((match) => {
+        const pred = pool.predictions[context.phase]?.[match.id] ?? {
+          home: null,
+          away: null,
+        };
+        const res = pool.results[match.id];
+        const pts = res ? scorePrediction(pred, res) : undefined;
+        const hasPrediction = pred.home !== null && pred.away !== null;
 
-        return `${a.match.date} ${a.match.time}`.localeCompare(
-          `${b.match.date} ${b.match.time}`,
-        );
+        return { match, pred, res, pts, hasPrediction };
       });
-  }, [rows, onlySimulated, pointsFilter, sortMode]);
+
+      const filteredRows = rows
+        .filter((row) => (onlySimulated ? Boolean(row.res) : true))
+        .filter((row) => {
+          if (pointsFilter === "all") return true;
+          return row.pts === pointsFilter;
+        })
+        .sort((a, b) => {
+          if (sortMode === "points") {
+            const ap = a.pts ?? -1;
+            const bp = b.pts ?? -1;
+            return bp - ap;
+          }
+
+          return `${a.match.date} ${a.match.time}`.localeCompare(
+            `${b.match.date} ${b.match.time}`,
+          );
+        });
+
+      return {
+        context,
+        rows,
+        filteredRows,
+        phasePoints: getPhasePointTotal(rows),
+      };
+    });
+  }, [
+    phaseContexts,
+    pool.predictions,
+    pool.results,
+    onlySimulated,
+    pointsFilter,
+    sortMode,
+  ]);
 
   const counts = allScoredRows.reduce(
     (acc, row) => {
@@ -487,6 +531,14 @@ function BreakdownPage({
   const predictionStatusTone = useMemo(
     () => getPhaseStatusTone(predictionStatusLines),
     [predictionStatusLines],
+  );
+
+  useEffect(() => {
+    setExpandedPhase(getLatestOpenPhase(pool.phase, phaseContexts));
+  }, [pool.phase, phaseContexts]);
+
+  const missingPredictionsLine = predictionStatusLines.find((line) =>
+    line.toLowerCase().includes("you still have"),
   );
 
   if (!resultsReady) {
@@ -593,27 +645,30 @@ function BreakdownPage({
               lineHeight: 1.36,
             }}
           >
-            {predictionStatusLines[predictionStatusLines.length - 1]}
+            {missingPredictionsLine ??
+              predictionStatusLines[predictionStatusLines.length - 1]}
           </span>
-          <button
-            type="button"
-            onClick={() => navigate("/")}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: "var(--accent-primary)",
-              fontWeight: 700,
-              fontSize: "1rem",
-              lineHeight: 1.36,
-              padding: 0,
-              cursor: "pointer",
-              textDecoration: "underline",
-              textUnderlineOffset: "0.14em",
-              whiteSpace: "nowrap",
-            }}
-          >
-            Fill your missing predictions here.
-          </button>
+          {missingPredictionsLine && (
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "var(--accent-primary)",
+                fontWeight: 700,
+                fontSize: "1rem",
+                lineHeight: 1.36,
+                padding: 0,
+                cursor: "pointer",
+                textDecoration: "underline",
+                textUnderlineOffset: "0.14em",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Fill your missing predictions here.
+            </button>
+          )}
         </div>
       </div>
 
@@ -906,49 +961,85 @@ function BreakdownPage({
             flexWrap: "wrap",
             gap: "0.75rem",
             alignItems: "center",
-            marginBottom: "1rem",
           }}
         >
-          <div
+          <label
             style={{
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              gap: "0.25rem",
-              padding: "0.25rem",
-              borderRadius: "999px",
-              border: "1px solid var(--border-subtle)",
-              background: "rgba(255,255,255,0.04)",
+              gap: "0.55rem",
+              minWidth: 0,
+              whiteSpace: "nowrap",
             }}
           >
-            {pointFilters.map((filter) => {
-              const isActive = pointsFilter === filter.key;
-
-              return (
-                <button
-                  key={String(filter.key)}
-                  type="button"
-                  onClick={() => setPointsFilter(filter.key)}
-                  style={{
-                    border: "none",
-                    background: isActive
-                      ? "rgba(58, 112, 226, 0.20)"
-                      : "transparent",
-                    color: isActive
-                      ? "var(--text-primary)"
-                      : "var(--text-secondary)",
-                    padding: "0.5rem 0.8rem",
-                    borderRadius: "999px",
-                    cursor: "pointer",
-                    fontWeight: 700,
-                    fontSize: "0.9rem",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {filter.label}
-                </button>
-              );
-            })}
-          </div>
+            <span
+              style={{
+                color: "var(--text-secondary)",
+                fontSize: "0.92rem",
+                fontWeight: 600,
+              }}
+            >
+              Show games:
+            </span>
+            <span
+              style={{
+                position: "relative",
+                display: "inline-flex",
+                minWidth: "190px",
+              }}
+            >
+              <select
+                value={String(pointsFilter)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === "all") {
+                    setPointsFilter("all");
+                  } else if (value === "3" || value === "1" || value === "0") {
+                    setPointsFilter(Number(value) as 3 | 1 | 0);
+                  }
+                }}
+                style={{
+                  border: "1px solid var(--border-subtle)",
+                  borderRadius: "999px",
+                  padding: "0.78rem 2.5rem 0.78rem 1rem",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "var(--text-primary)",
+                  outline: "none",
+                  fontWeight: 500,
+                  fontSize: "0.96rem",
+                  lineHeight: 1.2,
+                  minWidth: 0,
+                  boxSizing: "border-box",
+                  width: "100%",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                  MozAppearance: "none",
+                }}
+                aria-label="Show games filter"
+              >
+                {pointFilters.map((filter) => (
+                  <option key={String(filter.key)} value={String(filter.key)}>
+                    {filter.label}
+                  </option>
+                ))}
+              </select>
+              <span
+                className="material-symbols-rounded"
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: "0.85rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "var(--text-secondary)",
+                  fontSize: "1.15rem",
+                  pointerEvents: "none",
+                }}
+              >
+                expand_more
+              </span>
+            </span>
+          </label>
 
           <label
             style={{
@@ -1022,253 +1113,418 @@ function BreakdownPage({
             </span>
           </label>
         </div>
-
-        <ScrollableTabs ariaLabel="Breakdown group tabs">
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              paddingRight: "0.25rem",
-            }}
-          >
-            {pool.groups.map((group) => {
-              const isActive = pool.selectedGroup === group;
-
-              return (
-                <button
-                  key={group}
-                  type="button"
-                  onClick={() => pool.setSelectedGroup(group)}
-                  style={{
-                    border: isActive
-                      ? "1px solid rgba(58, 112, 226, 0.34)"
-                      : "1px solid var(--border-subtle)",
-                    background: isActive
-                      ? "rgba(58, 112, 226, 0.16)"
-                      : "rgba(255,255,255,0.04)",
-                    color: isActive
-                      ? "var(--text-primary)"
-                      : "var(--text-secondary)",
-                    padding: "0.72rem 1rem",
-                    borderRadius: "999px",
-                    cursor: "pointer",
-                    fontWeight: 700,
-                    fontSize: "0.95rem",
-                    whiteSpace: "nowrap",
-                    boxShadow: isActive
-                      ? "0 0 0 1px rgba(58, 112, 226, 0.06)"
-                      : "none",
-                  }}
-                >
-                  Group {group}
-                </button>
-              );
-            })}
-          </div>
-        </ScrollableTabs>
       </div>
 
       <div
         style={{
-          maxWidth: "900px",
+          maxWidth: "960px",
           margin: "0 auto",
           width: "100%",
+          display: "grid",
+          gap: "0.85rem",
         }}
       >
-        {filtered.length === 0 ? (
-          <EmptyState
-            title="No matches found for this view."
-            message="Try changing the group, filter, or simulated-only toggle."
-          />
-        ) : (
-          filtered.map(({ match, pred, res, pts, hasPrediction }) => (
+        {phaseRows.map(({ context, rows, filteredRows, phasePoints }) => {
+          const isOpen = expandedPhase === context.phase;
+          const isAccessible = context.isAvailable || context.isResolved;
+          const visibleRows =
+            context.phase === "groups"
+              ? filteredRows.filter(
+                  (row) => getMatchGroup(row.match) === pool.selectedGroup,
+                )
+              : filteredRows;
+
+          return (
             <div
-              key={match.id}
+              key={context.phase}
               style={{
                 border: "1px solid var(--border-subtle)",
-                borderRadius: "18px",
+                borderRadius: "20px",
                 padding: "1rem 1.1rem",
-                marginBottom: "0.75rem",
                 background:
                   "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
                 boxShadow: "var(--shadow-soft)",
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-                textAlign: "center",
+                opacity: isAccessible ? 1 : 0.68,
+                overflow: "hidden",
+                minWidth: 0,
               }}
             >
-              <div
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isAccessible) return;
+                  setExpandedPhase(
+                    isOpen
+                      ? getLatestOpenPhase(pool.phase, phaseContexts)
+                      : context.phase,
+                  );
+                }}
+                disabled={!isAccessible}
                 style={{
+                  width: "100%",
+                  border: "none",
+                  background: "transparent",
+                  padding: 0,
+                  cursor: isAccessible ? "pointer" : "default",
+                  textAlign: "left",
                   display: "grid",
-                  justifyItems: "center",
-                  gap: "0.45rem",
+                  gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                  gap: "1rem",
+                  alignItems: "center",
                 }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "0.55rem",
-                    flexWrap: "wrap",
-                    fontWeight: 700,
-                    color: "var(--text-primary)",
-                    lineHeight: 1.3,
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.45rem",
-                    }}
-                  >
-                    {getFlagUrl(getTeamCode(match, "home")) && (
-                      <img
-                        src={
-                          getFlagUrl(getTeamCode(match, "home")) ?? undefined
-                        }
-                        alt=""
-                        width={22}
-                        height={22}
-                        style={{
-                          width: "22px",
-                          height: "22px",
-                          borderRadius: "999px",
-                          objectFit: "cover",
-                          border: "1px solid rgba(255,255,255,0.12)",
-                        }}
-                      />
-                    )}
-                    <span>{getTeamName(match, "home")}</span>
-                  </span>
-                  <span style={{ color: "var(--text-muted)", fontWeight: 600 }}>
-                    vs
-                  </span>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.45rem",
-                    }}
-                  >
-                    {getFlagUrl(getTeamCode(match, "away")) && (
-                      <img
-                        src={
-                          getFlagUrl(getTeamCode(match, "away")) ?? undefined
-                        }
-                        alt=""
-                        width={22}
-                        height={22}
-                        style={{
-                          width: "22px",
-                          height: "22px",
-                          borderRadius: "999px",
-                          objectFit: "cover",
-                          border: "1px solid rgba(255,255,255,0.12)",
-                        }}
-                      />
-                    )}
-                    <span>{getTeamName(match, "away")}</span>
-                  </span>
-                </div>
-
-                <div
-                  style={{
-                    color: "var(--text-muted)",
-                    fontWeight: 500,
-                    fontSize: "0.95rem",
-                  }}
-                >
-                  {match.date} {match.time}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  marginTop: "0.85rem",
-                  display: "flex",
-                  gap: "0.75rem",
-                  flexWrap: "wrap",
-                  justifyContent: "center",
-                  color: "var(--text-secondary)",
-                  fontSize: "0.95rem",
-                }}
-              >
-                <div
-                  style={{
-                    padding: "0.55rem 0.75rem",
-                    borderRadius: "14px",
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid var(--border-subtle)",
-                  }}
-                >
-                  Prediction:{" "}
-                  <strong
-                    style={{ color: "var(--text-primary)", fontWeight: 600 }}
-                  >
-                    {hasPrediction ? `${pred.home}-${pred.away}` : "Not set"}
-                  </strong>
-                </div>
-
-                <div
-                  style={{
-                    padding: "0.55rem 0.75rem",
-                    borderRadius: "14px",
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid var(--border-subtle)",
-                  }}
-                >
-                  Result:{" "}
-                  <strong
-                    style={{ color: "var(--text-primary)", fontWeight: 600 }}
-                  >
-                    {res ? `${res.home}-${res.away}` : "-"}
-                  </strong>
-                </div>
-
-                <div
-                  style={{
-                    padding: "0.55rem 0.75rem",
-                    borderRadius: "14px",
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid var(--border-subtle)",
-                    fontWeight: 800,
-                    color: "var(--text-primary)",
-                  }}
-                >
-                  Points: {res ? pts : "-"}
-                </div>
-
-                {res && (
+                <div style={{ minWidth: 0 }}>
                   <div
                     style={{
-                      padding: "0.55rem 0.75rem",
-                      borderRadius: "14px",
-                      border:
-                        pts === 3
-                          ? "1px solid rgba(12, 157, 97, 0.24)"
-                          : pts === 1
-                            ? "1px solid rgba(255, 173, 13, 0.24)"
-                            : "1px solid rgba(236, 45, 48, 0.24)",
-                      background:
-                        pts === 3
-                          ? "rgba(12, 157, 97, 0.14)"
-                          : pts === 1
-                            ? "rgba(255, 173, 13, 0.12)"
-                            : "rgba(236, 45, 48, 0.12)",
                       color: "var(--text-primary)",
                       fontWeight: 800,
+                      fontSize: "1.02rem",
+                      lineHeight: 1.2,
                     }}
                   >
-                    {pts === 3 ? "Exact score" : pts === 1 ? "Outcome" : "Miss"}
+                    {getPhaseTitle(context.phase)} - {rows.length} matches
                   </div>
-                )}
-              </div>
+                  <div
+                    style={{
+                      color: "var(--text-secondary)",
+                      marginTop: "0.35rem",
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {isAccessible
+                      ? `You made ${phasePoints} ${phasePoints === 1 ? "point" : "points"}`
+                      : `${getPhaseTitle(context.phase)} is not available yet`}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    textAlign: "right",
+                    color: "var(--text-primary)",
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  <div style={{ fontSize: "1.85rem" }}>{phasePoints}</div>
+                  <div
+                    style={{
+                      color: "var(--text-secondary)",
+                      fontSize: "0.78rem",
+                      marginTop: "0.18rem",
+                      letterSpacing: "0.04em",
+                    }}
+                  >
+                    PTS
+                  </div>
+                </div>
+
+                <span
+                  className="material-symbols-rounded"
+                  aria-hidden="true"
+                  style={{
+                    width: "2.2rem",
+                    height: "2.2rem",
+                    borderRadius: "999px",
+                    display: "grid",
+                    placeItems: "center",
+                    border: "1px solid var(--border-subtle)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "var(--text-secondary)",
+                    flexShrink: 0,
+                  }}
+                >
+                  {isOpen ? "expand_less" : "expand_more"}
+                </span>
+              </button>
+
+              {isOpen && isAccessible && (
+                <div
+                  style={{
+                    marginTop: "0.95rem",
+                    display: "grid",
+                    gap: "0.75rem",
+                    minWidth: 0,
+                    width: "100%",
+                  }}
+                >
+                  {context.phase === "groups" && (
+                    <div
+                      style={{
+                        minWidth: 0,
+                        width: "100%",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <ScrollableTabs ariaLabel="Breakdown group tabs">
+                        <div
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.5rem",
+                            paddingRight: "0.25rem",
+                            minWidth: "max-content",
+                          }}
+                        >
+                          {pool.groups.map((group) => {
+                            const isActive = pool.selectedGroup === group;
+
+                            return (
+                              <button
+                                key={group}
+                                type="button"
+                                onClick={() => pool.setSelectedGroup(group)}
+                                style={{
+                                  border: isActive
+                                    ? "1px solid rgba(58, 112, 226, 0.34)"
+                                    : "1px solid var(--border-subtle)",
+                                  background: isActive
+                                    ? "rgba(58, 112, 226, 0.16)"
+                                    : "rgba(255,255,255,0.04)",
+                                  color: isActive
+                                    ? "var(--text-primary)"
+                                    : "var(--text-secondary)",
+                                  padding: "0.72rem 1rem",
+                                  borderRadius: "999px",
+                                  cursor: "pointer",
+                                  fontWeight: 700,
+                                  fontSize: "0.95rem",
+                                  whiteSpace: "nowrap",
+                                  boxShadow: isActive
+                                    ? "0 0 0 1px rgba(58, 112, 226, 0.06)"
+                                    : "none",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                Group {group}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </ScrollableTabs>
+                    </div>
+                  )}
+
+                  {visibleRows.length === 0 ? (
+                    <EmptyState
+                      title="No games in this phase for the selected view"
+                      message="Try changing the game filter or the simulated-only toggle."
+                    />
+                  ) : (
+                    visibleRows.map(
+                      ({ match, pred, res, pts, hasPrediction }) => (
+                        <div
+                          key={match.id}
+                          style={{
+                            border: "1px solid var(--border-subtle)",
+                            borderRadius: "18px",
+                            padding: "1rem 1.1rem",
+                            background:
+                              "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+                            boxShadow: "var(--shadow-soft)",
+                            backdropFilter: "blur(12px)",
+                            WebkitBackdropFilter: "blur(12px)",
+                            textAlign: "center",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "grid",
+                              justifyItems: "center",
+                              gap: "0.45rem",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "0.55rem",
+                                flexWrap: "wrap",
+                                fontWeight: 700,
+                                color: "var(--text-primary)",
+                                lineHeight: 1.3,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "0.45rem",
+                                }}
+                              >
+                                {getFlagUrl(getTeamCode(match, "home")) && (
+                                  <img
+                                    src={
+                                      getFlagUrl(getTeamCode(match, "home")) ??
+                                      undefined
+                                    }
+                                    alt=""
+                                    width={22}
+                                    height={22}
+                                    style={{
+                                      width: "22px",
+                                      height: "22px",
+                                      borderRadius: "999px",
+                                      objectFit: "cover",
+                                      border:
+                                        "1px solid rgba(255,255,255,0.12)",
+                                    }}
+                                  />
+                                )}
+                                <span>{getTeamName(match, "home")}</span>
+                              </span>
+                              <span
+                                style={{
+                                  color: "var(--text-muted)",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                vs
+                              </span>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "0.45rem",
+                                }}
+                              >
+                                {getFlagUrl(getTeamCode(match, "away")) && (
+                                  <img
+                                    src={
+                                      getFlagUrl(getTeamCode(match, "away")) ??
+                                      undefined
+                                    }
+                                    alt=""
+                                    width={22}
+                                    height={22}
+                                    style={{
+                                      width: "22px",
+                                      height: "22px",
+                                      borderRadius: "999px",
+                                      objectFit: "cover",
+                                      border:
+                                        "1px solid rgba(255,255,255,0.12)",
+                                    }}
+                                  />
+                                )}
+                                <span>{getTeamName(match, "away")}</span>
+                              </span>
+                            </div>
+
+                            <div
+                              style={{
+                                color: "var(--text-muted)",
+                                fontWeight: 500,
+                                fontSize: "0.95rem",
+                              }}
+                            >
+                              {match.date} {match.time}
+                            </div>
+                          </div>
+
+                          <div
+                            style={{
+                              marginTop: "0.85rem",
+                              display: "flex",
+                              gap: "0.75rem",
+                              flexWrap: "wrap",
+                              justifyContent: "center",
+                              color: "var(--text-secondary)",
+                              fontSize: "0.95rem",
+                            }}
+                          >
+                            <div
+                              style={{
+                                padding: "0.55rem 0.75rem",
+                                borderRadius: "14px",
+                                background: "rgba(255,255,255,0.04)",
+                                border: "1px solid var(--border-subtle)",
+                              }}
+                            >
+                              Prediction:{" "}
+                              <strong
+                                style={{
+                                  color: "var(--text-primary)",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {hasPrediction
+                                  ? `${pred.home}-${pred.away}`
+                                  : "Not set"}
+                              </strong>
+                            </div>
+
+                            <div
+                              style={{
+                                padding: "0.55rem 0.75rem",
+                                borderRadius: "14px",
+                                background: "rgba(255,255,255,0.04)",
+                                border: "1px solid var(--border-subtle)",
+                              }}
+                            >
+                              Result:{" "}
+                              <strong
+                                style={{
+                                  color: "var(--text-primary)",
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {res ? `${res.home}-${res.away}` : "-"}
+                              </strong>
+                            </div>
+
+                            <div
+                              style={{
+                                padding: "0.55rem 0.75rem",
+                                borderRadius: "14px",
+                                background: "rgba(255,255,255,0.04)",
+                                border: "1px solid var(--border-subtle)",
+                                fontWeight: 800,
+                                color: "var(--text-primary)",
+                              }}
+                            >
+                              Points: {res ? pts : "-"}
+                            </div>
+
+                            {res && (
+                              <div
+                                style={{
+                                  padding: "0.55rem 0.75rem",
+                                  borderRadius: "14px",
+                                  border:
+                                    pts === 3
+                                      ? "1px solid rgba(12, 157, 97, 0.24)"
+                                      : pts === 1
+                                        ? "1px solid rgba(255, 173, 13, 0.24)"
+                                        : "1px solid rgba(236, 45, 48, 0.24)",
+                                  background:
+                                    pts === 3
+                                      ? "rgba(12, 157, 97, 0.14)"
+                                      : pts === 1
+                                        ? "rgba(255, 173, 13, 0.12)"
+                                        : "rgba(236, 45, 48, 0.12)",
+                                  color: "var(--text-primary)",
+                                  fontWeight: 800,
+                                }}
+                              >
+                                {pts === 3
+                                  ? "Exact score"
+                                  : pts === 1
+                                    ? "Outcome"
+                                    : "Miss"}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ),
+                    )
+                  )}
+                </div>
+              )}
             </div>
-          ))
-        )}
+          );
+        })}
       </div>
     </section>
   );
