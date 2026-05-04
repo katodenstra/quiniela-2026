@@ -63,6 +63,33 @@ function getTeamCode(match: ComparisonMatch, side: "home" | "away") {
   return "code" in team ? team.code : team.teamCode;
 }
 
+function countryCodeToFlagEmoji(code?: string | null) {
+  if (!code) return "";
+  const normalized = code.trim().toUpperCase();
+  if (normalized.length !== 2) return "";
+
+  return String.fromCodePoint(
+    ...Array.from(normalized).map((char) => 127397 + char.charCodeAt(0)),
+  );
+}
+
+function getCountryFlagEmoji(country: string, rows: BreakdownRow[]) {
+  for (const row of rows) {
+    const homeName = getTeamName(row.match, "home");
+    const awayName = getTeamName(row.match, "away");
+
+    if (homeName === country) {
+      return countryCodeToFlagEmoji(getTeamCode(row.match, "home"));
+    }
+
+    if (awayName === country) {
+      return countryCodeToFlagEmoji(getTeamCode(row.match, "away"));
+    }
+  }
+
+  return "";
+}
+
 function getPhaseStatusTone(lines: string[]) {
   const joined = lines.join(" ").toLowerCase();
 
@@ -88,12 +115,12 @@ function DashboardCard({
   detail?: ReactNode;
   tone?: "neutral" | "positive" | "warning";
 }) {
-  const accent =
+  const borderColor =
     tone === "positive"
       ? "rgba(12, 157, 97, 0.24)"
       : tone === "warning"
         ? "rgba(236, 45, 48, 0.24)"
-        : "rgba(58, 112, 226, 0.16)";
+        : "var(--border-subtle)";
 
   const surface =
     tone === "positive"
@@ -102,19 +129,32 @@ function DashboardCard({
         ? "rgba(236, 45, 48, 0.10)"
         : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))";
 
+  const labelColor =
+    tone === "positive"
+      ? "rgba(12, 157, 97, 0.98)"
+      : tone === "warning"
+        ? "rgba(236, 45, 48, 0.98)"
+        : "var(--text-muted)";
+
+  const detailColor =
+    tone === "positive" || tone === "warning"
+      ? "var(--text-primary)"
+      : "var(--text-secondary)";
+
   return (
     <div
       style={{
-        border: "1px solid var(--border-subtle)",
+        border: `1px solid ${borderColor}`,
         borderRadius: "20px",
         padding: "1rem 1.1rem",
         background: surface,
-        boxShadow: `0 0 0 1px ${accent}, var(--shadow-soft)`,
+        boxShadow: "var(--shadow-soft)",
+        textAlign: "center",
       }}
     >
       <div
         style={{
-          color: "var(--text-muted)",
+          color: labelColor,
           fontWeight: 700,
           fontSize: "0.82rem",
           textTransform: "uppercase",
@@ -136,7 +176,7 @@ function DashboardCard({
       {detail && (
         <div
           style={{
-            color: "var(--text-secondary)",
+            color: detailColor,
             fontSize: "0.9rem",
             marginTop: "0.45rem",
             lineHeight: 1.35,
@@ -213,7 +253,7 @@ function getPredictionStatusDetail(
       return [
         `You still have ${currentProgress.missing} ${
           currentProgress.missing === 1 ? "match" : "matches"
-        } to predict in this phase`,
+        } to predict in this phase.`,
       ];
     }
 
@@ -237,7 +277,7 @@ function getPredictionStatusDetail(
       `You can now fill predictions for ${nextLabel}`,
       `You still have ${nextProgress.missing} ${
         nextProgress.missing === 1 ? "match" : "matches"
-      } to predict in this phase`,
+      } to predict in this phase.`,
     ];
   }
 
@@ -432,6 +472,12 @@ function BreakdownPage({
   );
 
   const countryInsights = getCountryInsights(allScoredRows);
+  const bestCountryFlag = countryInsights.best
+    ? getCountryFlagEmoji(countryInsights.best[0], allScoredRows)
+    : "";
+  const toughestCountryFlag = countryInsights.worst
+    ? getCountryFlagEmoji(countryInsights.worst[0], allScoredRows)
+    : "";
   const predictionStatusLines = useMemo(
     () =>
       getPredictionStatusDetail(pool.phase, phaseContexts, pool.predictions),
@@ -465,6 +511,111 @@ function BreakdownPage({
         title="Scoring breakdown"
         description="Review match-by-match scoring outcomes, filter results and inspect prediction performance."
       />
+
+      <div
+        style={{
+          border: "1px solid var(--border-subtle)",
+          borderRadius: "20px",
+          padding: "1rem 1.1rem",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
+          boxShadow: "var(--shadow-soft)",
+          marginBottom: "1rem",
+          display: "grid",
+          gridTemplateColumns: "auto minmax(0, 1fr)",
+          gap: "1rem",
+          alignItems: "center",
+        }}
+      >
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.55rem",
+            flexWrap: "wrap",
+            textAlign: "left",
+          }}
+        >
+          <span
+            style={{
+              color: "var(--text-secondary)",
+              fontWeight: 600,
+              whiteSpace: "nowrap",
+            }}
+          >
+            Current phase:
+          </span>
+          <span
+            style={{
+              display: "inline-flex",
+              padding: "0.38rem 0.7rem",
+              borderRadius: "999px",
+              border: `1px solid ${
+                predictionStatusTone === "positive"
+                  ? "rgba(12, 157, 97, 0.22)"
+                  : predictionStatusTone === "warning"
+                    ? "rgba(236, 45, 48, 0.22)"
+                    : "rgba(58, 112, 226, 0.22)"
+              }`,
+              background:
+                predictionStatusTone === "positive"
+                  ? "rgba(12, 157, 97, 0.10)"
+                  : predictionStatusTone === "warning"
+                    ? "rgba(236, 45, 48, 0.08)"
+                    : "rgba(58, 112, 226, 0.10)",
+              color: "var(--text-primary)",
+              fontWeight: 800,
+              fontSize: "0.8rem",
+              textTransform: "uppercase",
+              letterSpacing: "0.03em",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {getPhaseTitle(pool.phase)}
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: "0.5rem",
+            flexWrap: "wrap",
+            textAlign: "right",
+            minWidth: 0,
+          }}
+        >
+          <span
+            style={{
+              color: "var(--text-primary)",
+              fontWeight: 700,
+              lineHeight: 1.36,
+            }}
+          >
+            {predictionStatusLines[predictionStatusLines.length - 1]}
+          </span>
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            style={{
+              border: "none",
+              background: "transparent",
+              color: "var(--accent-primary)",
+              fontWeight: 700,
+              fontSize: "1rem",
+              lineHeight: 1.36,
+              padding: 0,
+              cursor: "pointer",
+              textDecoration: "underline",
+              textUnderlineOffset: "0.14em",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Fill your missing predictions here.
+          </button>
+        </div>
+      </div>
 
       <div
         style={{
@@ -502,8 +653,7 @@ function BreakdownPage({
       <div
         style={{
           display: "grid",
-          gridTemplateColumns:
-            "minmax(0, 1.08fr) minmax(0, 0.82fr) minmax(0, 1fr)",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
           gap: "0.9rem",
           marginBottom: "1.25rem",
           alignItems: "stretch",
@@ -654,97 +804,6 @@ function BreakdownPage({
               textAlign: "center",
             }}
           >
-            Prediction status
-          </div>
-          <div
-            style={{
-              display: "grid",
-              alignContent: "start",
-              gap: "0.65rem",
-              flex: 1,
-              padding: "0.05rem 0",
-            }}
-          >
-            <div
-              style={{
-                display: "inline-flex",
-                alignSelf: "flex-start",
-                padding: "0.38rem 0.7rem",
-                borderRadius: "999px",
-                border: `1px solid ${
-                  predictionStatusTone === "positive"
-                    ? "rgba(12, 157, 97, 0.22)"
-                    : predictionStatusTone === "warning"
-                      ? "rgba(236, 45, 48, 0.22)"
-                      : "rgba(58, 112, 226, 0.22)"
-                }`,
-                background:
-                  predictionStatusTone === "positive"
-                    ? "rgba(12, 157, 97, 0.10)"
-                    : predictionStatusTone === "warning"
-                      ? "rgba(236, 45, 48, 0.08)"
-                      : "rgba(58, 112, 226, 0.10)",
-                color: "var(--text-primary)",
-                fontWeight: 800,
-                fontSize: "0.8rem",
-                textTransform: "uppercase",
-                letterSpacing: "0.03em",
-              }}
-            >
-              {getPhaseTitle(pool.phase)}
-            </div>
-
-            <div
-              style={{
-                color: "var(--text-secondary)",
-                display: "grid",
-                gap: "0.42rem",
-                lineHeight: 1.36,
-                fontSize: "0.94rem",
-                justifyItems: "start",
-                textAlign: "left",
-              }}
-            >
-              {predictionStatusLines.map((line, index) => (
-                <div
-                  key={line}
-                  style={{
-                    color:
-                      index === 0
-                        ? "var(--text-primary)"
-                        : "var(--text-secondary)",
-                    fontWeight: index === 0 ? 700 : 500,
-                    maxWidth: "24ch",
-                  }}
-                >
-                  {line}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            border: "1px solid var(--border-subtle)",
-            borderRadius: "20px",
-            padding: "1rem 1.1rem",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
-            boxShadow: "var(--shadow-soft)",
-            display: "flex",
-            flexDirection: "column",
-            minHeight: "100%",
-          }}
-        >
-          <div
-            style={{
-              color: "var(--text-primary)",
-              fontWeight: 700,
-              marginBottom: "0.75rem",
-              textAlign: "center",
-            }}
-          >
             Country insights
           </div>
 
@@ -761,16 +820,17 @@ function BreakdownPage({
               style={{
                 border: "1px solid rgba(12, 157, 97, 0.24)",
                 borderRadius: "16px",
-                padding: "0.8rem 0.85rem",
+                padding: "1rem 0.95rem",
                 background: "rgba(12, 157, 97, 0.12)",
               }}
             >
               <div
                 style={{
-                  color: "var(--text-muted)",
+                  color: "rgba(12, 157, 97, 0.98)",
                   fontSize: "0.78rem",
                   fontWeight: 800,
                   textTransform: "uppercase",
+                  textAlign: "center",
                 }}
               >
                 Best country
@@ -783,10 +843,11 @@ function BreakdownPage({
                   lineHeight: 1.32,
                   maxWidth: "22ch",
                   margin: "0.32rem auto 0",
+                  textAlign: "center",
                 }}
               >
                 {countryInsights.best
-                  ? `${countryInsights.best[1]} points from ${countryInsights.best[0]} matches`
+                  ? `${countryInsights.best[1]} points from ${countryInsights.best[0]}${bestCountryFlag ? ` ${bestCountryFlag}` : ""} matches`
                   : "No country data yet"}
               </div>
             </div>
@@ -795,16 +856,17 @@ function BreakdownPage({
               style={{
                 border: "1px solid rgba(236, 45, 48, 0.24)",
                 borderRadius: "16px",
-                padding: "0.8rem 0.85rem",
+                padding: "1rem 0.95rem",
                 background: "rgba(236, 45, 48, 0.1)",
               }}
             >
               <div
                 style={{
-                  color: "var(--text-muted)",
+                  color: "rgba(236, 45, 48, 0.98)",
                   fontSize: "0.78rem",
                   fontWeight: 800,
                   textTransform: "uppercase",
+                  textAlign: "center",
                 }}
               >
                 Toughest country
@@ -817,10 +879,11 @@ function BreakdownPage({
                   lineHeight: 1.32,
                   maxWidth: "22ch",
                   margin: "0.32rem auto 0",
+                  textAlign: "center",
                 }}
               >
                 {countryInsights.worst
-                  ? `${countryInsights.worst[1]} points from ${countryInsights.worst[0]} matches`
+                  ? `${countryInsights.worst[1]} points from ${countryInsights.worst[0]}${toughestCountryFlag ? ` ${toughestCountryFlag}` : ""} matches`
                   : "No country data yet"}
               </div>
             </div>
@@ -904,29 +967,60 @@ function BreakdownPage({
             Only simulated
           </label>
 
-          <select
-            value={sortMode}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value === "date" || value === "points") {
-                setSortMode(value);
-              }
-            }}
+          <label
             style={{
               marginLeft: "auto",
-              padding: "0.62rem 0.8rem",
-              borderRadius: "999px",
-              border: "1px solid var(--border-subtle)",
-              background: "rgba(255,255,255,0.04)",
-              color: "var(--text-primary)",
-              fontWeight: 700,
-              outline: "none",
+              position: "relative",
+              display: "inline-flex",
+              minWidth: "180px",
             }}
-            aria-label="Sort breakdown"
           >
-            <option value="date">Sort: Date</option>
-            <option value="points">Sort: Points</option>
-          </select>
+            <select
+              value={sortMode}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === "date" || value === "points") {
+                  setSortMode(value);
+                }
+              }}
+              style={{
+                border: "1px solid var(--border-subtle)",
+                borderRadius: "999px",
+                padding: "0.78rem 2.5rem 0.78rem 1rem",
+                background: "rgba(255,255,255,0.05)",
+                color: "var(--text-primary)",
+                outline: "none",
+                fontWeight: 500,
+                fontSize: "0.96rem",
+                lineHeight: 1.2,
+                minWidth: 0,
+                boxSizing: "border-box",
+                width: "100%",
+                appearance: "none",
+                WebkitAppearance: "none",
+                MozAppearance: "none",
+              }}
+              aria-label="Sort breakdown"
+            >
+              <option value="date">Sort: Date</option>
+              <option value="points">Sort: Points</option>
+            </select>
+            <span
+              className="material-symbols-rounded"
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                right: "0.85rem",
+                top: "50%",
+                transform: "translateY(-50%)",
+                color: "var(--text-secondary)",
+                fontSize: "1.15rem",
+                pointerEvents: "none",
+              }}
+            >
+              expand_more
+            </span>
+          </label>
         </div>
 
         <ScrollableTabs ariaLabel="Breakdown group tabs">
