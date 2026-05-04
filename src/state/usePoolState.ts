@@ -46,6 +46,7 @@ const GROUP_KEY = "prediction_pool:selected_group:v1";
 const VIEW_MODE_KEY = "prediction_pool:view_mode:v1";
 const MATCHDAY_KEY = "prediction_pool:selected_matchday:v1";
 const PHASE_KEY = "prediction_pool:phase:v1";
+const FEATURED_FRIENDS_KEY = "prediction_pool:featured_friends:v1";
 
 export function randomScore() {
   return Math.floor(Math.random() * 5);
@@ -186,6 +187,20 @@ export function usePoolState(matches: GroupStageMatch[]) {
       return normalizePhase(raw);
     }
     return "groups";
+  });
+
+  const [featuredFriendIds, setFeaturedFriendIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(FEATURED_FRIENDS_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((id): id is string => typeof id === "string")
+        .slice(0, 3);
+    } catch {
+      return [];
+    }
   });
 
   const setActivePhase = useCallback((nextPhase: TournamentPhase) => {
@@ -359,6 +374,13 @@ export function usePoolState(matches: GroupStageMatch[]) {
     localStorage.setItem(PHASE_KEY, phase);
   }, [phase]);
 
+  useEffect(() => {
+    localStorage.setItem(
+      FEATURED_FRIENDS_KEY,
+      JSON.stringify(featuredFriendIds),
+    );
+  }, [featuredFriendIds]);
+
   const getPrediction = (matchId: number): Prediction => {
     return predictions[phase]?.[matchId] ?? { home: null, away: null };
   };
@@ -473,9 +495,11 @@ export function usePoolState(matches: GroupStageMatch[]) {
     setPredictions(emptyPredictionsByPhase);
     setResults({});
     setPredictionStateByPhase(emptyPredictionStateByPhase);
+    setFeaturedFriendIds([]);
     setActivePhase("groups");
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(RESULTS_KEY);
+    localStorage.removeItem(FEATURED_FRIENDS_KEY);
     localStorage.setItem(
       STATE_KEY,
       JSON.stringify(emptyPredictionStateByPhase),
@@ -632,6 +656,8 @@ export function usePoolState(matches: GroupStageMatch[]) {
     matchdays,
     selectedMatchday: activeMatchday,
     setSelectedMatchday,
+    featuredFriendIds,
+    setFeaturedFriendIds,
     phase,
     setPhase: setActivePhase,
     getMatchesForPhase,
