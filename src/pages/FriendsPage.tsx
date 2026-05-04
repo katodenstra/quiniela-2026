@@ -38,12 +38,7 @@ import {
 type FriendPredictionsByPhase = Partial<
   Record<TournamentPhase, Record<string, PredictionsByMatchId>>
 >;
-type FriendFilter =
-  | "all"
-  | "above"
-  | "below"
-  | "featured"
-  | "closest";
+type FriendFilter = "all" | "above" | "below";
 type FriendSort = "az" | "za" | "pointsAsc" | "pointsDesc";
 
 type FriendViewModel = {
@@ -55,18 +50,35 @@ type FriendViewModel = {
   isFeatured: boolean;
 };
 
-const pageSize = 25;
-const maxFeaturedFriends = 3;
+const pageSize = 10;
+const maxFeaturedFriends = 5;
 const controlStyle: CSSProperties = {
   border: "1px solid var(--border-subtle)",
   borderRadius: "999px",
-  padding: "0.76rem 0.95rem",
-  minHeight: "2.75rem",
-  background: "rgba(255,255,255,0.045)",
+  padding: "0 1rem",
+  height: "2.7rem",
+  background: "rgba(255,255,255,0.055)",
   color: "var(--text-primary)",
   outline: "none",
   fontWeight: 500,
+  fontSize: "0.94rem",
+  lineHeight: 1,
   boxSizing: "border-box",
+};
+
+const selectControlStyle: CSSProperties = {
+  ...controlStyle,
+  width: "100%",
+  paddingRight: "2.35rem",
+  appearance: "none",
+  WebkitAppearance: "none",
+};
+
+const controlLabelStyle: CSSProperties = {
+  color: "var(--text-secondary)",
+  fontSize: "0.88rem",
+  fontWeight: 500,
+  whiteSpace: "nowrap",
 };
 
 function Avatar({ name }: { name: string }) {
@@ -103,8 +115,7 @@ function formatDelta(delta: number) {
 }
 
 function DeltaPill({ delta }: { delta: number }) {
-  const tone =
-    delta > 0 ? "positive" : delta < 0 ? "negative" : "neutral";
+  const tone = delta > 0 ? "positive" : delta < 0 ? "negative" : "neutral";
 
   return (
     <span
@@ -197,90 +208,116 @@ function FriendCard({
       to={`/friends/${encodeURIComponent(item.friend.id)}`}
       style={{
         display: "grid",
-        gridTemplateColumns: "auto minmax(180px, 0.8fr) minmax(360px, 1.2fr) auto",
+        gridTemplateColumns:
+          "minmax(12rem, 1fr) minmax(10rem, 0.7fr) minmax(10rem, 1fr)",
         gap: "0.8rem",
         alignItems: "center",
         textDecoration: "none",
         color: "inherit",
         border: "1px solid var(--border-subtle)",
         borderRadius: "20px",
-        padding: "0.82rem 0.95rem",
+        padding: "0.78rem 0.9rem",
         background:
           "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
         boxShadow: "var(--shadow-soft)",
       }}
     >
-      <Avatar name={item.friend.name} />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.72rem",
+          minWidth: 0,
+          textAlign: "left",
+        }}
+      >
+        <Avatar name={item.friend.name} />
+
+        <div
+          style={{
+            minWidth: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: "0.48rem",
+          }}
+        >
+          <span
+            style={{
+              color: "var(--text-primary)",
+              fontWeight: 800,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              minWidth: 0,
+            }}
+          >
+            {item.friend.name}
+          </span>
+          <span
+            aria-hidden="true"
+            style={{
+              width: "1.78rem",
+              height: "1.78rem",
+              borderRadius: "999px",
+              display: "grid",
+              placeItems: "center",
+              border: "1px solid var(--border-subtle)",
+              background: "rgba(255,255,255,0.04)",
+              color: "var(--text-secondary)",
+              flexShrink: 0,
+            }}
+          >
+            <span className="material-symbols-rounded">chevron_right</span>
+          </span>
+        </div>
+      </div>
 
       <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: "0.5rem",
+          justifyContent: "center",
+          gap: "0.7rem",
           minWidth: 0,
-          textAlign: "left",
         }}
       >
         <span
           style={{
-            color: "var(--text-primary)",
-            fontWeight: 800,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
+            color: "var(--text-secondary)",
+            fontSize: "0.92rem",
+            fontWeight: 700,
             whiteSpace: "nowrap",
-            minWidth: 0,
           }}
         >
-          {item.friend.name}
+          {item.points} points
         </span>
         <span
-          aria-hidden="true"
           style={{
-            width: "1.9rem",
-            height: "1.9rem",
-            borderRadius: "999px",
-            display: "grid",
-            placeItems: "center",
-            border: "1px solid var(--border-subtle)",
-            background: "rgba(255,255,255,0.04)",
-            color: "var(--text-secondary)",
-            flexShrink: 0,
+            color: "var(--text-muted)",
+            fontSize: "0.9rem",
+            whiteSpace: "nowrap",
           }}
         >
-          <span className="material-symbols-rounded">chevron_right</span>
+          Rank: {item.rank === null ? "-" : `#${item.rank}`}
         </span>
       </div>
 
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "6rem 5.5rem minmax(8rem, 1fr)",
-          gap: "0.65rem",
+          display: "flex",
           alignItems: "center",
-          color: "var(--text-muted)",
-          fontSize: "0.9rem",
-          lineHeight: 1.4,
+          justifyContent: "flex-end",
+          gap: "0.7rem",
           minWidth: 0,
         }}
       >
-        <span>{item.points} points</span>
-        <span>Rank: {item.rank === null ? "-" : `#${item.rank}`}</span>
-        <span
-          style={{
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {formatDelta(item.delta)}
-        </span>
+        <DeltaPill delta={item.delta} />
+        <StarButton
+          isFeatured={item.isFeatured}
+          disabled={featuredLimitReached}
+          onToggle={() => onToggleFeatured(item.friend.id)}
+        />
       </div>
-
-      <StarButton
-        isFeatured={item.isFeatured}
-        disabled={featuredLimitReached}
-        onToggle={() => onToggleFeatured(item.friend.id)}
-      />
     </Link>
   );
 }
@@ -300,39 +337,88 @@ function FeaturedFriendCard({
       style={{
         position: "relative",
         display: "grid",
-        justifyItems: "center",
-        textAlign: "center",
-        gap: "0.45rem",
-        minHeight: "11.5rem",
+        gridTemplateColumns: "auto minmax(0, 1fr) auto",
+        alignItems: "start",
+        gap: "0.78rem",
+        minHeight: "7rem",
         border: "1px solid var(--border-subtle)",
-        borderRadius: "20px",
-        padding: "1.15rem 1rem",
+        borderRadius: "18px",
+        padding: "0.88rem 0.9rem",
         textDecoration: "none",
         color: "inherit",
         background:
           "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
         boxShadow: "var(--shadow-soft)",
+        textAlign: "left",
+        cursor: "pointer",
+        transition: "background 160ms ease, transform 160ms ease",
+      }}
+      onMouseEnter={(event) => {
+        event.currentTarget.style.transform = "translateY(-1px)";
+        event.currentTarget.style.background =
+          "linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.025))";
+      }}
+      onMouseLeave={(event) => {
+        event.currentTarget.style.transform = "translateY(0)";
+        event.currentTarget.style.background =
+          "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))";
       }}
     >
-      <div style={{ position: "absolute", top: "0.75rem", right: "0.75rem" }}>
-        <StarButton
-          isFeatured={item.isFeatured}
-          disabled={featuredLimitReached}
-          onToggle={() => onToggleFeatured(item.friend.id)}
-        />
+      <Avatar name={item.friend.name} />
+
+      <div
+        style={{
+          minWidth: 0,
+          display: "grid",
+          alignContent: "start",
+          gap: "0.36rem",
+          paddingTop: "0.1rem",
+        }}
+      >
+        <div
+          style={{
+            color: "var(--text-primary)",
+            fontWeight: 800,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+            lineHeight: 1.15,
+          }}
+        >
+          {item.friend.name}
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.38rem",
+            flexWrap: "wrap",
+            color: "var(--text-muted)",
+            fontSize: "0.84rem",
+            lineHeight: 1.25,
+          }}
+        >
+          <span
+            style={{
+              color: "var(--text-secondary)",
+              fontWeight: 800,
+            }}
+          >
+            {item.points} points
+          </span>
+          <span aria-hidden="true">•</span>
+          <span>Rank: {item.rank === null ? "-" : `#${item.rank}`}</span>
+        </div>
+        <div>
+          <DeltaPill delta={item.delta} />
+        </div>
       </div>
 
-      <Avatar name={item.friend.name} />
-      <div style={{ color: "var(--text-primary)", fontWeight: 800 }}>
-        {item.friend.name}
-      </div>
-      <div style={{ color: "var(--text-secondary)", fontWeight: 700 }}>
-        {item.points} points
-      </div>
-      <div style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-        Rank: {item.rank === null ? "-" : `#${item.rank}`}
-      </div>
-      <DeltaPill delta={item.delta} />
+      <StarButton
+        isFeatured={item.isFeatured}
+        disabled={featuredLimitReached}
+        onToggle={() => onToggleFeatured(item.friend.id)}
+      />
     </Link>
   );
 }
@@ -343,24 +429,26 @@ function EmptyFeaturedSlot({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       style={{
-        minHeight: "11.5rem",
+        minHeight: "7rem",
         border: "1px dashed var(--border-subtle)",
-        borderRadius: "20px",
-        padding: "1.15rem 1rem",
+        borderRadius: "18px",
+        padding: "0.88rem 0.9rem",
         background: "rgba(255,255,255,0.025)",
         color: "var(--text-secondary)",
         cursor: "pointer",
-        display: "grid",
-        placeItems: "center",
-        gap: "0.65rem",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "0.68rem",
+        textAlign: "left",
       }}
     >
       <span
         className="material-symbols-rounded"
         aria-hidden="true"
         style={{
-          width: "3rem",
-          height: "3rem",
+          width: "2.45rem",
+          height: "2.45rem",
           borderRadius: "999px",
           display: "grid",
           placeItems: "center",
@@ -371,7 +459,9 @@ function EmptyFeaturedSlot({ onClick }: { onClick: () => void }) {
       >
         add
       </span>
-      <span style={{ fontWeight: 700 }}>Add featured friend</span>
+      <span style={{ fontWeight: 700, lineHeight: 1.2 }}>
+        Add featured friend
+      </span>
     </button>
   );
 }
@@ -547,13 +637,20 @@ function InsightCard({
       style={{
         border: "1px solid var(--border-subtle)",
         borderRadius: "20px",
-        padding: "1rem 1.1rem",
+        padding: "0.76rem 0.84rem",
         background:
           "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
         boxShadow: "var(--shadow-soft)",
+        height: "100%",
       }}
     >
-      <div style={{ color: "var(--text-primary)", fontWeight: 800 }}>
+      <div
+        style={{
+          color: "var(--text-primary)",
+          fontWeight: 800,
+          lineHeight: 1.15,
+        }}
+      >
         {title}
       </div>
       {subtitle && (
@@ -561,13 +658,14 @@ function InsightCard({
           style={{
             color: "var(--text-muted)",
             fontSize: "0.88rem",
-            marginTop: "0.22rem",
+            marginTop: "0.18rem",
+            lineHeight: 1.25,
           }}
         >
           {subtitle}
         </div>
       )}
-      <div style={{ display: "grid", gap: "0.55rem", marginTop: "0.85rem" }}>
+      <div style={{ display: "grid", gap: "0.38rem", marginTop: "0.58rem" }}>
         {children}
       </div>
     </div>
@@ -592,7 +690,7 @@ function CompactInsightRow({
           : "minmax(0, 1fr) 4.8rem",
         gap: "0.55rem",
         alignItems: "center",
-        padding: "0.56rem 0.65rem",
+        padding: "0.44rem 0.56rem",
         borderRadius: "14px",
         border: "1px solid var(--border-subtle)",
         background: "rgba(255,255,255,0.035)",
@@ -624,8 +722,8 @@ function PoolInsightSubcard({
           tone === "positive"
             ? "1px solid rgba(12, 157, 97, 0.24)"
             : "1px solid rgba(236, 45, 48, 0.24)",
-        borderRadius: "16px",
-        padding: "0.75rem 0.8rem",
+        borderRadius: "14px",
+        padding: "0.58rem 0.64rem",
         background:
           tone === "positive"
             ? "rgba(12, 157, 97, 0.12)"
@@ -634,7 +732,10 @@ function PoolInsightSubcard({
     >
       <div
         style={{
-          color: "var(--text-muted)",
+          color:
+            tone === "positive"
+              ? "rgba(12, 157, 97, 0.9)"
+              : "rgba(236, 45, 48, 0.9)",
           fontSize: "0.76rem",
           fontWeight: 800,
           textTransform: "uppercase",
@@ -646,8 +747,8 @@ function PoolInsightSubcard({
         style={{
           color: "var(--text-primary)",
           fontWeight: 500,
-          marginTop: "0.35rem",
-          lineHeight: 1.32,
+          marginTop: "0.24rem",
+          lineHeight: 1.26,
         }}
       >
         {highlight ? (
@@ -677,7 +778,6 @@ function FriendsPage({
     useState<FriendPredictionsByPhase>({});
   const [predictionsLoading, setPredictionsLoading] = useState(true);
   const [predictionsError, setPredictionsError] = useState<string | null>(null);
-  const [featuredFriendIds, setFeaturedFriendIds] = useState<string[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FriendFilter>("all");
@@ -695,7 +795,8 @@ function FriendsPage({
         const entries = await Promise.all(
           scorableComparisonPhases.map(async (phase) => {
             const apiPredictions = await getAllFriendPredictions(phase);
-            const generatedPredictions = generatedFriendPredictions[phase] ?? {};
+            const generatedPredictions =
+              generatedFriendPredictions[phase] ?? {};
 
             return [
               phase,
@@ -782,15 +883,15 @@ function FriendsPage({
         rank: rankIndex === -1 ? null : rankIndex + 1,
         points,
         delta: points - myPoints,
-        isFeatured: featuredFriendIds.includes(friend.id),
+        isFeatured: pool.featuredFriendIds.includes(friend.id),
       };
     });
-  }, [friends, featuredFriendIds, leaderboard, myPoints]);
+  }, [friends, leaderboard, myPoints, pool.featuredFriendIds]);
 
   const featuredLimitReached =
-    featuredFriendIds.length >= maxFeaturedFriends;
+    pool.featuredFriendIds.length >= maxFeaturedFriends;
 
-  const featuredItems = featuredFriendIds
+  const featuredItems = pool.featuredFriendIds
     .map((friendId) => friendItems.find((item) => item.friend.id === friendId))
     .filter((item): item is FriendViewModel => item !== undefined);
 
@@ -832,7 +933,6 @@ function FriendsPage({
 
   const visibleFriends = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    const closestIds = new Set(closestRivals.map((item) => item.id));
 
     return friendItems
       .filter((item) =>
@@ -841,8 +941,6 @@ function FriendsPage({
       .filter((item) => {
         if (filter === "above") return item.delta > 0;
         if (filter === "below") return item.delta < 0;
-        if (filter === "featured") return item.isFeatured;
-        if (filter === "closest") return closestIds.has(item.friend.id);
         return true;
       })
       .sort((a, b) => {
@@ -851,7 +949,7 @@ function FriendsPage({
         if (sort === "pointsAsc") return a.points - b.points;
         return b.points - a.points;
       });
-  }, [closestRivals, filter, friendItems, search, sort]);
+  }, [filter, friendItems, search, sort]);
 
   const totalPages = Math.max(Math.ceil(visibleFriends.length / pageSize), 1);
   const currentPage = Math.min(page, totalPages);
@@ -859,9 +957,13 @@ function FriendsPage({
     (currentPage - 1) * pageSize,
     currentPage * pageSize,
   );
+  const paginationStart =
+    visibleFriends.length === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const paginationEnd = Math.min(currentPage * pageSize, visibleFriends.length);
+  const totalFriendCount = friends?.length ?? 0;
 
   const addFeaturedFriend = (friendId: string) => {
-    setFeaturedFriendIds((prev) => {
+    pool.setFeaturedFriendIds((prev) => {
       if (prev.includes(friendId)) return prev;
       if (prev.length >= maxFeaturedFriends) return prev;
       return [...prev, friendId];
@@ -869,7 +971,7 @@ function FriendsPage({
   };
 
   const toggleFeaturedFriend = (friendId: string) => {
-    setFeaturedFriendIds((prev) => {
+    pool.setFeaturedFriendIds((prev) => {
       if (prev.includes(friendId)) {
         return prev.filter((id) => id !== friendId);
       }
@@ -878,16 +980,16 @@ function FriendsPage({
     });
   };
 
-  const availableModalFriends = friendItems.filter(
-    (item) => !item.isFeatured,
-  );
+  const availableModalFriends = friendItems.filter((item) => !item.isFeatured);
 
   return (
     <section>
-      <PageIntro
-        title="Friends"
-        description="Track featured friends, find rivals and open detailed prediction comparisons."
-      />
+      <div style={{ paddingTop: "0.35rem", marginBottom: "0.2rem" }}>
+        <PageIntro
+          title="Friends"
+          description="Track featured friends, find rivals and open detailed prediction comparisons."
+        />
+      </div>
 
       {(loading || predictionsLoading) && (
         <div
@@ -922,56 +1024,52 @@ function FriendsPage({
 
       {!loading && !error && (friends ?? []).length > 0 && (
         <>
-          <section style={{ marginBottom: "1.25rem" }}>
-            <div
-              style={{
-                color: "var(--text-primary)",
-                fontSize: "1.05rem",
-                fontWeight: 800,
-                marginBottom: "0.75rem",
-              }}
-            >
-              Featured friends
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                gap: "0.9rem",
-              }}
-            >
-              {Array.from({ length: maxFeaturedFriends }, (_, index) => {
-                const item = featuredItems[index];
-
-                return item ? (
-                  <FeaturedFriendCard
-                    key={item.friend.id}
-                    item={item}
-                    featuredLimitReached={featuredLimitReached}
-                    onToggleFeatured={toggleFeaturedFriend}
-                  />
-                ) : (
-                  <EmptyFeaturedSlot
-                    key={`empty-${index}`}
-                    onClick={() => setModalOpen(true)}
-                  />
-                );
-              })}
-            </div>
-          </section>
-
-          <div
+          <section
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-              gap: "0.9rem",
+              gap: "0.8rem",
               marginBottom: "1.25rem",
+              alignItems: "stretch",
             }}
           >
+            <InsightCard title="Closest rivals">
+              {closestRivals.map((item) => (
+                <CompactInsightRow
+                  key={item.id}
+                  left={
+                    <span
+                      style={{
+                        color: "var(--text-primary)",
+                        fontWeight: 700,
+                        minWidth: 0,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {item.name}
+                    </span>
+                  }
+                  middle={
+                    <span
+                      style={{
+                        color: "var(--text-secondary)",
+                        fontWeight: 800,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {item.points} pts
+                    </span>
+                  }
+                  right={<DeltaPill delta={item.delta} />}
+                />
+              ))}
+            </InsightCard>
+
             <InsightCard
               title="Top performers by match day"
-              subtitle="Using cumulative resolved-phase points until matchday scoring is modeled."
+              subtitle="Cumulative points until matchday scoring is modeled."
             >
               {topPerformers.map((item, index) => (
                 <CompactInsightRow
@@ -1023,40 +1121,6 @@ function FriendsPage({
               ))}
             </InsightCard>
 
-            <InsightCard title="Closest rivals">
-              {closestRivals.map((item) => (
-                <CompactInsightRow
-                  key={item.id}
-                  left={
-                    <span
-                      style={{
-                        color: "var(--text-primary)",
-                        fontWeight: 700,
-                        minWidth: 0,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {item.name}
-                    </span>
-                  }
-                  middle={
-                    <span
-                      style={{
-                        color: "var(--text-secondary)",
-                        fontWeight: 800,
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {item.points} pts
-                    </span>
-                  }
-                  right={<DeltaPill delta={item.delta} />}
-                />
-              ))}
-            </InsightCard>
-
             <InsightCard title="Pool insights">
               <PoolInsightSubcard
                 label="Most reliable team"
@@ -1079,135 +1143,333 @@ function FriendsPage({
                 highlight={poolTeamInsights.leastPredictableTeam?.teamName}
               />
             </InsightCard>
-          </div>
+          </section>
 
           <section
             style={{
-              border: "1px solid var(--border-subtle)",
-              borderRadius: "22px",
-              padding: "1rem",
-              background: "rgba(255,255,255,0.03)",
+              display: "grid",
+              gridTemplateColumns: "minmax(280px, 0.95fr) minmax(0, 2fr)",
+              gap: "1rem",
+              alignItems: "stretch",
+              height: "min(760px, calc(100vh - 8rem))",
+              minHeight: "38rem",
             }}
           >
-            <div
+            <aside
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: "1rem",
-                flexWrap: "wrap",
-                marginBottom: "0.9rem",
-              }}
-            >
-              <div style={{ color: "var(--text-primary)", fontWeight: 800 }}>
-                All friends
-              </div>
-              <div style={{ color: "var(--text-muted)", fontWeight: 600 }}>
-                {visibleFriends.length} shown
-              </div>
-            </div>
-
-            <div
-              style={{
+                border: "1px solid var(--border-subtle)",
+                borderRadius: "22px",
+                padding: "1rem",
+                background: "rgba(255,255,255,0.03)",
+                minHeight: 0,
+                height: "100%",
                 display: "grid",
-                gridTemplateColumns: "minmax(280px, 1fr) minmax(160px, auto) minmax(190px, auto)",
-                gap: "0.7rem",
-                alignItems: "center",
-                marginBottom: "1rem",
+                gridTemplateRows: "auto minmax(0, 1fr)",
+                alignContent: "start",
               }}
             >
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search friends"
+              <div
                 style={{
-                  ...controlStyle,
-                  border: "1px solid var(--border-subtle)",
-                  background: "rgba(255,255,255,0.055)",
-                  minWidth: 0,
-                }}
-              />
-
-              <select
-                value={filter}
-                onChange={(event) => setFilter(event.target.value as FriendFilter)}
-                aria-label="Filter friends"
-                style={{
-                  ...controlStyle,
+                  color: "var(--text-primary)",
+                  fontSize: "1.05rem",
+                  fontWeight: 800,
+                  marginBottom: "0.8rem",
                 }}
               >
-                <option value="all">All</option>
-                <option value="above">Above me</option>
-                <option value="below">Below me</option>
-                <option value="featured">Featured friends</option>
-                <option value="closest">Closest rivals</option>
-              </select>
-
-              <select
-                value={sort}
-                onChange={(event) => setSort(event.target.value as FriendSort)}
-                aria-label="Sort friends"
-                style={{
-                  ...controlStyle,
-                }}
-              >
-                <option value="az">Alphabetical A-Z</option>
-                <option value="za">Alphabetical Z-A</option>
-                <option value="pointsAsc">Points ascending</option>
-                <option value="pointsDesc">Points descending</option>
-              </select>
-            </div>
-
-            {paginatedFriends.length === 0 ? (
-              <EmptyState
-                title="No friends match the current view."
-                message="Adjust search, filters, or sorting to widen the list."
-              />
-            ) : (
-              <div style={{ display: "grid", gap: "0.75rem" }}>
-                {paginatedFriends.map((item) => (
-                  <FriendCard
-                    key={item.friend.id}
-                    item={item}
-                    featuredLimitReached={featuredLimitReached}
-                    onToggleFeatured={toggleFeaturedFriend}
-                  />
-                ))}
+                Featured friends
               </div>
-            )}
 
-            {totalPages > 1 && (
+              <div
+                style={{
+                  display: "grid",
+                  gap: "0.58rem",
+                  alignContent: "start",
+                  gridAutoRows: "min-content",
+                }}
+              >
+                {Array.from({ length: maxFeaturedFriends }, (_, index) => {
+                  const item = featuredItems[index];
+
+                  return item ? (
+                    <FeaturedFriendCard
+                      key={item.friend.id}
+                      item={item}
+                      featuredLimitReached={featuredLimitReached}
+                      onToggleFeatured={toggleFeaturedFriend}
+                    />
+                  ) : (
+                    <EmptyFeaturedSlot
+                      key={`empty-${index}`}
+                      onClick={() => setModalOpen(true)}
+                    />
+                  );
+                })}
+              </div>
+            </aside>
+
+            <section
+              style={{
+                border: "1px solid var(--border-subtle)",
+                borderRadius: "22px",
+                padding: "1rem",
+                background: "rgba(255,255,255,0.03)",
+                minWidth: 0,
+                minHeight: 0,
+                height: "100%",
+                display: "grid",
+                gridTemplateRows: "auto auto minmax(0, 1fr)",
+              }}
+            >
+              <style>
+                {`
+                  .friends-list-scroll {
+                    scrollbar-width: thin;
+                    scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+                  }
+
+                  .friends-list-scroll::-webkit-scrollbar {
+                    width: 10px;
+                  }
+
+                  .friends-list-scroll::-webkit-scrollbar-track {
+                    background: transparent;
+                    border-radius: 999px;
+                  }
+
+                  .friends-list-scroll::-webkit-scrollbar-thumb {
+                    background: rgba(255, 255, 255, 0.16);
+                    border-radius: 999px;
+                    border: 3px solid transparent;
+                    background-clip: padding-box;
+                  }
+
+                  .friends-list-scroll::-webkit-scrollbar-thumb:hover {
+                    background: rgba(255, 255, 255, 0.24);
+                    background-clip: padding-box;
+                  }
+                `}
+              </style>
               <div
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
-                  gap: "0.75rem",
-                  marginTop: "1rem",
+                  gap: "1rem",
                   flexWrap: "wrap",
+                  marginBottom: "0.78rem",
                 }}
               >
-                <Button
-                  variant="ghost"
-                  disabled={currentPage === 1}
-                  onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
-                >
-                  Previous
-                </Button>
-                <div style={{ color: "var(--text-secondary)", fontWeight: 700 }}>
-                  Page {currentPage} of {totalPages}
+                <div style={{ color: "var(--text-primary)", fontWeight: 800 }}>
+                  All friends
                 </div>
-                <Button
-                  variant="ghost"
-                  disabled={currentPage === totalPages}
-                  onClick={() =>
-                    setPage((prev) => Math.min(prev + 1, totalPages))
-                  }
+                <div
+                  style={{
+                    color: "var(--text-muted)",
+                    fontWeight: 500,
+                    fontSize: "0.9rem",
+                    border: "1px solid var(--border-subtle)",
+                    borderRadius: "999px",
+                    padding: "0.28rem 0.7rem",
+                    background: "rgba(255,255,255,0.035)",
+                    whiteSpace: "nowrap",
+                  }}
                 >
-                  Next
-                </Button>
+                  {visibleFriends.length === 0
+                    ? `Showing 0 of ${totalFriendCount} friends`
+                    : `Showing ${paginationStart}-${paginationEnd} of ${totalFriendCount} friends`}
+                </div>
               </div>
-            )}
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: "0.62rem",
+                  alignItems: "start",
+                  marginBottom: "0.9rem",
+                  width: "100%",
+                }}
+              >
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search friends"
+                  style={{
+                    ...controlStyle,
+                    height: "2.55rem",
+                    fontSize: "0.92rem",
+                    minWidth: 0,
+                    gridColumn: "1 / -1",
+                  }}
+                />
+
+                <label
+                  style={{
+                    display: "grid",
+                    gap: "0.32rem",
+                    minWidth: 0,
+                  }}
+                >
+                  <span style={controlLabelStyle}>Showing friends</span>
+                  <span
+                    style={{
+                      position: "relative",
+                      minWidth: 0,
+                    }}
+                  >
+                    <select
+                      value={filter}
+                      onChange={(event) =>
+                        setFilter(event.target.value as FriendFilter)
+                      }
+                      aria-label="Filter friends"
+                      style={{
+                        ...selectControlStyle,
+                        height: "2.55rem",
+                        fontSize: "0.92rem",
+                      }}
+                    >
+                      <option value="all">All</option>
+                      <option value="above">Above me</option>
+                      <option value="below">Below me</option>
+                    </select>
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                      style={{
+                        position: "absolute",
+                        right: "0.82rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        color: "var(--text-secondary)",
+                        fontSize: "1.2rem",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      expand_more
+                    </span>
+                  </span>
+                </label>
+
+                <label
+                  style={{
+                    display: "grid",
+                    gap: "0.32rem",
+                    minWidth: 0,
+                  }}
+                >
+                  <span style={controlLabelStyle}>Sort friends by</span>
+                  <span
+                    style={{
+                      position: "relative",
+                      minWidth: 0,
+                    }}
+                  >
+                    <select
+                      value={sort}
+                      onChange={(event) =>
+                        setSort(event.target.value as FriendSort)
+                      }
+                      aria-label="Sort friends"
+                      style={{
+                        ...selectControlStyle,
+                        height: "2.55rem",
+                        fontSize: "0.92rem",
+                      }}
+                    >
+                      <option value="az">Alphabetical A-Z</option>
+                      <option value="za">Alphabetical Z-A</option>
+                      <option value="pointsAsc">Points ascending</option>
+                      <option value="pointsDesc">Points descending</option>
+                    </select>
+                    <span
+                      className="material-symbols-rounded"
+                      aria-hidden="true"
+                      style={{
+                        position: "absolute",
+                        right: "0.82rem",
+                        top: "50%",
+                        transform: "translateY(-50%)",
+                        color: "var(--text-secondary)",
+                        fontSize: "1.2rem",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      expand_more
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              <div
+                className="friends-list-scroll"
+                style={{
+                  minHeight: 0,
+                  height: "100%",
+                  overflowY: "auto",
+                  overflowX: "hidden",
+                  paddingRight: "0.35rem",
+                  paddingBottom: "0.25rem",
+                  overscrollBehavior: "contain",
+                }}
+              >
+                {paginatedFriends.length === 0 ? (
+                  <EmptyState
+                    title="No friends match the current view."
+                    message="Adjust search, filters, or sorting to widen the list."
+                  />
+                ) : (
+                  <div style={{ display: "grid", gap: "0.75rem" }}>
+                    {paginatedFriends.map((item) => (
+                      <FriendCard
+                        key={item.friend.id}
+                        item={item}
+                        featuredLimitReached={featuredLimitReached}
+                        onToggleFeatured={toggleFeaturedFriend}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                {totalPages > 1 && (
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: "0.75rem",
+                      marginTop: "1rem",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <Button
+                      variant="ghost"
+                      disabled={currentPage === 1}
+                      onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
+                    >
+                      Previous
+                    </Button>
+                    <div
+                      style={{
+                        color: "var(--text-secondary)",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Page {currentPage} of {totalPages}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      disabled={currentPage === totalPages}
+                      onClick={() =>
+                        setPage((prev) => Math.min(prev + 1, totalPages))
+                      }
+                    >
+                      Next
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </section>
           </section>
         </>
       )}
